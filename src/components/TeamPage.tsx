@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { TeamMember, Task } from '../types/pms';
 
-export type TeamRole = 'Project Manager' | 'Team Leader' | 'Team Member';
+export type TeamRole = 'Project Manager' | 'Team Leader' | 'Team Member' | 'Tester';
 
 interface TeamPageProps {
   members?: TeamMember[];
@@ -25,7 +25,7 @@ interface TeamPageProps {
   onRemoveMember?: (memberId: string) => void;
 }
 
-const ROLES: TeamRole[] = ['Project Manager', 'Team Leader', 'Team Member'];
+const ROLES: TeamRole[] = ['Project Manager', 'Team Leader', 'Team Member', 'Tester'];
 
 export default function TeamPage({
   members = [],
@@ -206,6 +206,13 @@ export default function TeamPage({
             Team Leader
           </span>
         );
+      case 'Tester':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            Tester (QA)
+          </span>
+        );
       case 'Team Member':
       default:
         return (
@@ -288,7 +295,7 @@ export default function TeamPage({
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 <span>Role:</span>
               </div>
-              {(['All', 'Project Manager', 'Team Leader', 'Team Member'] as const).map((r) => (
+              {(['All', 'Project Manager', 'Team Leader', 'Team Member', 'Tester'] as const).map((r) => (
                 <button
                   key={r}
                   type="button"
@@ -511,6 +518,7 @@ export default function TeamPage({
                   {formData.role === 'Project Manager' && 'Full executive authority; final task approval to Completed.'}
                   {formData.role === 'Team Leader' && 'Reviews submitted tasks; can request corrections or recommend approval.'}
                   {formData.role === 'Team Member' && 'Works on assigned tasks and submits completed work for review.'}
+                  {formData.role === 'Tester' && 'Performs QA testing on submitted work, reports bugs, and verifies fixes.'}
                 </p>
               </div>
 

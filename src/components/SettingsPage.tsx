@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type {
   UserProfile,
+  UserRole,
   NotificationPreferences,
   AppearanceSettings,
   Task,
@@ -26,7 +27,7 @@ import type {
 
 interface SettingsPageProps {
   userProfile: UserProfile;
-  currentUserRole: 'Project Manager' | 'Team Leader' | 'Team Member';
+  currentUserRole: UserRole;
   notificationPreferences: NotificationPreferences;
   appearanceSettings: AppearanceSettings;
   tasks?: Task[];
@@ -303,7 +304,7 @@ export default function SettingsPage({
                     onChange={(e) => setFullName(e.target.value)}
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
-                    placeholder="e.g. Alex Morgan"
+                    placeholder="e.g. Full Name"
                   />
                 </div>
 

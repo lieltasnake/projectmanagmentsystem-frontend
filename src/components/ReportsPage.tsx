@@ -13,12 +13,14 @@ import {
   Sparkles,
   RotateCcw,
   User,
+  Bug as BugIcon,
 } from 'lucide-react';
-import type { Project, Task } from '../types/pms';
+import type { Project, Task, Bug } from '../types/pms';
 
 interface ReportsPageProps {
   projects?: Project[];
   tasks?: Task[];
+  bugs?: Bug[];
 }
 
 const THEME_STYLES = {
@@ -60,7 +62,11 @@ const THEME_STYLES = {
   },
 };
 
-export default function ReportsPage({ projects = [], tasks = [] }: ReportsPageProps) {
+export default function ReportsPage({
+  projects = [],
+  tasks = [],
+  bugs = [],
+}: ReportsPageProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
 
@@ -277,6 +283,15 @@ export default function ReportsPage({ projects = [], tasks = [] }: ReportsPagePr
               icon={<AlertTriangle className="w-5 h-5" />}
               theme="rose"
             />
+            {bugs.length > 0 && (
+              <StatCard
+                title="Active Defects"
+                value={bugs.filter((b) => b.status !== 'Verified').length}
+                subtitle={`${bugs.filter((b) => b.status === 'Verified').length} verified`}
+                icon={<BugIcon className="w-5 h-5" />}
+                theme="amber"
+              />
+            )}
           </div>
 
           {/* Overall Completion Banner */}

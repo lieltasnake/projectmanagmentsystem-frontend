@@ -13,31 +13,54 @@ import {
   X,
   Info,
   Briefcase,
+  Users,
+  ShieldCheck,
 } from 'lucide-react';
-import type { Project } from '../types/pms';
+import type { Project, TeamMember, UserRole } from '../types/pms';
 
 export type { Project };
 
 interface ProjectsPageProps {
   projects?: Project[];
+  teamMembers?: TeamMember[];
+  currentUserRole?: UserRole;
+  currentUserName?: string;
   onAddProject?: (project: Project) => void;
   onSelectProject?: (project: Project) => void;
 }
 
-export default function ProjectsPage({ projects = [], onAddProject, onSelectProject }: ProjectsPageProps) {
+export default function ProjectsPage({
+  projects = [],
+  teamMembers = [],
+  currentUserRole = 'Project Manager',
+  currentUserName = '',
+  onAddProject,
+  onSelectProject,
+}: ProjectsPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
+  // Split registered team members by role for the dropdowns
+  const registeredTLs = useMemo(
+    () => teamMembers.filter((m) => m.role === 'Team Leader'),
+    [teamMembers]
+  );
+  const registeredTMs = useMemo(
+    () => teamMembers.filter((m) => m.role === 'Team Member'),
+    [teamMembers]
+  );
+
   // Controlled form state for the project creation form
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    managerName: '',
     startDate: '',
     deadline: '',
     status: 'Planning' as Project['status'],
+    teamLeaderId: '',
+    teamMemberIds: [] as string[],
   });
 
   // State to show validation error or notice when user submits the form
@@ -63,10 +86,11 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
     setFormData({
       name: '',
       description: '',
-      managerName: '',
       startDate: '',
       deadline: '',
       status: 'Planning',
+      teamLeaderId: '',
+      teamMemberIds: [],
     });
     setIsCreateModalOpen(true);
   };
@@ -76,12 +100,22 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
     setFormError(null);
   };
 
+  // Toggle a team member in/out of the multi-select list
+  const handleToggleMember = (memberId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      teamMemberIds: prev.teamMemberIds.includes(memberId)
+        ? prev.teamMemberIds.filter((id) => id !== memberId)
+        : [...prev.teamMemberIds, memberId],
+    }));
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
     // Validate required fields
-    if (!formData.name.trim() || !formData.managerName.trim() || !formData.startDate || !formData.deadline) {
+    if (!formData.name.trim() || !formData.startDate || !formData.deadline) {
       setFormError('Please fill in all required fields.');
       return;
     }
@@ -96,9 +130,9 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
     const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
     const newProjectId = `PRJ-${uniqueSuffix}`;
 
-    // Derive avatar initials
-    const initials = formData.managerName
-      .trim()
+    // Derive PM name and initials from the current logged-in user
+    const pmName = currentUserName.trim() || 'Project Manager';
+    const initials = pmName
       .split(/[\s._-]+/)
       .slice(0, 2)
       .map((s) => s.charAt(0).toUpperCase())
@@ -109,7 +143,7 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
       name: formData.name.trim(),
       description: formData.description.trim(),
       manager: {
-        name: formData.managerName.trim(),
+        name: pmName,
         role: 'Project Manager',
         avatarInitials: initials,
       },
@@ -122,6 +156,8 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
         completed: 0,
         total: 0,
       },
+      teamLeaderId: formData.teamLeaderId || undefined,
+      teamMemberIds: formData.teamMemberIds.length > 0 ? [...formData.teamMemberIds] : undefined,
     };
 
     if (onAddProject) {
@@ -132,10 +168,11 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
     setFormData({
       name: '',
       description: '',
-      managerName: '',
       startDate: '',
       deadline: '',
       status: 'Planning',
+      teamLeaderId: '',
+      teamMemberIds: [],
     });
     setIsCreateModalOpen(false);
   };
@@ -193,15 +230,17 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
           </p>
         </div>
 
-        {/* Create Project Button */}
-        <button
-          type="button"
-          onClick={handleOpenModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 active:scale-[0.99] transition-all cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Project</span>
-        </button>
+        {/* Create Project Button — PM only */}
+        {currentUserRole === 'Project Manager' && (
+          <button
+            type="button"
+            onClick={handleOpenModal}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 active:scale-[0.99] transition-all cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Project</span>
+          </button>
+        )}
       </div>
 
       {/* 2. Empty State when no real projects exist */}
@@ -216,14 +255,16 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
           <p className="mt-2 text-xs sm:text-sm text-slate-400 max-w-md leading-relaxed">
             There are currently no active projects in the database. When projects are created by the Project Manager, they will appear here with progress tracking, assigned leads, and milestone deadlines.
           </p>
-          <button
-            type="button"
-            onClick={handleOpenModal}
-            className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-lg shadow-purple-600/20 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create your first project</span>
-          </button>
+          {currentUserRole === 'Project Manager' && (
+            <button
+              type="button"
+              onClick={handleOpenModal}
+              className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-lg shadow-purple-600/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create your first project</span>
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -346,6 +387,34 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
                       </span>
                     </div>
 
+                    {/* Team Assignment Chips */}
+                    {(project.teamLeaderId || (project.teamMemberIds && project.teamMemberIds.length > 0)) && (
+                      <div className="mt-3 space-y-1.5">
+                        {project.teamLeaderId && (() => {
+                          const tl = teamMembers.find((m) => m.id === project.teamLeaderId);
+                          return tl ? (
+                            <div className="flex items-center gap-1.5">
+                              <ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <span className="text-[10px] text-indigo-300 font-medium">TL:</span>
+                              <span className="text-[10px] text-slate-200 truncate">{tl.name}</span>
+                            </div>
+                          ) : null;
+                        })()}
+                        {project.teamMemberIds && project.teamMemberIds.length > 0 && (
+                          <div className="flex items-start gap-1.5">
+                            <Users className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                            <span className="text-[10px] text-emerald-300 font-medium shrink-0">Team:</span>
+                            <span className="text-[10px] text-slate-300 leading-relaxed">
+                              {project.teamMemberIds
+                                .map((id) => teamMembers.find((m) => m.id === id)?.name)
+                                .filter(Boolean)
+                                .join(', ')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Dates: Start & Deadline */}
                     <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
                       <div>
@@ -402,6 +471,7 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
                     <tr>
                       <th scope="col" className="px-5 py-3.5 font-semibold">Project Name</th>
                       <th scope="col" className="px-5 py-3.5 font-semibold">Project Manager</th>
+                      <th scope="col" className="px-5 py-3.5 font-semibold">Team</th>
                       <th scope="col" className="px-5 py-3.5 font-semibold">Start Date</th>
                       <th scope="col" className="px-5 py-3.5 font-semibold">Deadline</th>
                       <th scope="col" className="px-5 py-3.5 font-semibold">Status</th>
@@ -439,6 +509,24 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
                               <div className="font-semibold text-white">{project.manager.name}</div>
                               <div className="text-[10px] text-purple-300">Responsible PM</div>
                             </div>
+                          </div>
+                        </td>
+
+                        {/* Team Assignment */}
+                        <td className="px-5 py-4">
+                          <div className="space-y-0.5 text-[11px]">
+                            {project.teamLeaderId ? (
+                              <div className="flex items-center gap-1">
+                                <ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
+                                <span className="text-indigo-300">{teamMembers.find((m) => m.id === project.teamLeaderId)?.name ?? '—'}</span>
+                              </div>
+                            ) : <span className="text-slate-600 italic">No TL</span>}
+                            {project.teamMemberIds && project.teamMemberIds.length > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Users className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span className="text-slate-300">{project.teamMemberIds.length} member{project.teamMemberIds.length !== 1 ? 's' : ''}</span>
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -522,7 +610,7 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
             <div className="mt-4 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
               <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Create Project:</strong> Enter project specifications. Newly created projects will appear in your workspace and task assignment workflows.
+                <strong>Create Project:</strong> Assign a Team Leader and Team Members from registered workspace users. Assignments are saved and visible after refresh.
               </span>
             </div>
 
@@ -574,25 +662,89 @@ export default function ProjectsPage({ projects = [], onAddProject, onSelectProj
                 </div>
               </div>
 
-              {/* Responsible Project Manager */}
+              {/* Responsible Project Manager — auto-filled from logged-in user */}
               <div>
-                <label htmlFor="projectManager" className="block text-xs font-medium text-slate-200 mb-1">
-                  Responsible Project Manager <span className="text-purple-400">*</span>
+                <label className="block text-xs font-medium text-slate-200 mb-1">
+                  Responsible Project Manager
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="projectManager"
-                    type="text"
-                    required
-                    value={formData.managerName}
-                    onChange={(e) => setFormData({ ...formData, managerName: e.target.value })}
-                    placeholder="e.g. Lead Project Manager Name"
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
-                  />
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700/60 text-sm text-slate-200">
+                  <UserCheck className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>{currentUserName || 'Current User (PM)'}</span>
+                  <span className="ml-auto text-[10px] text-purple-300 font-medium">Auto-assigned</span>
                 </div>
+              </div>
+
+              {/* Assign Team Leader */}
+              <div>
+                <label htmlFor="assignTL" className="block text-xs font-medium text-slate-200 mb-1">
+                  Assign Team Leader
+                </label>
+                {registeredTLs.length === 0 ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    No Team Leaders registered yet. Add a Team Leader in the Team page first.
+                  </div>
+                ) : (
+                  <select
+                    id="assignTL"
+                    value={formData.teamLeaderId}
+                    onChange={(e) => setFormData({ ...formData, teamLeaderId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                  >
+                    <option value="" className="bg-[#0f173b]">— None (assign later) —</option>
+                    {registeredTLs.map((tl) => (
+                      <option key={tl.id} value={tl.id} className="bg-[#0f173b]">
+                        {tl.name} ({tl.email})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Assign Team Members */}
+              <div>
+                <label className="block text-xs font-medium text-slate-200 mb-1">
+                  Assign Team Members
+                  {formData.teamMemberIds.length > 0 && (
+                    <span className="ml-2 text-[10px] text-emerald-300 font-normal">
+                      ({formData.teamMemberIds.length} selected)
+                    </span>
+                  )}
+                </label>
+                {registeredTMs.length === 0 ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    No Team Members registered yet. Add Team Members in the Team page first.
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-slate-900/80 border border-slate-700/80 max-h-36 overflow-y-auto divide-y divide-slate-800/60">
+                    {registeredTMs.map((tm) => {
+                      const selected = formData.teamMemberIds.includes(tm.id);
+                      return (
+                        <label
+                          key={tm.id}
+                          className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                            selected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => handleToggleMember(tm.id)}
+                            className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
+                          />
+                          <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                            {tm.avatarInitials}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-white truncate">{tm.name}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{tm.email}</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Dates Grid: Start Date & Deadline */}

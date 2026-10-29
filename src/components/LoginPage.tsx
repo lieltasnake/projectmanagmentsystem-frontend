@@ -1,37 +1,48 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, Info } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, Info, User, Briefcase } from 'lucide-react';
+import type { TeamMember, UserRole } from '../types/pms';
+export type { UserRole };
 
 interface LoginPageProps {
-  onLogin?: (email: string) => void;
+  onLogin?: (email: string, role?: UserRole, name?: string) => void;
+  teamMembers?: TeamMember[];
 }
 
-export default function LoginPage({ onLogin }: LoginPageProps = {}) {
+export default function LoginPage({ onLogin, teamMembers = [] }: LoginPageProps = {}) {
   // State for form inputs
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<UserRole>('Project Manager');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   // State for frontend demo feedback
   const [demoMessage, setDemoMessage] = useState<string | null>(null);
 
-  // Handle form submission (demonstration only, no backend)
+  // Handle selecting an existing member from localStorage if available
+  const handleSelectExistingMember = (member: TeamMember) => {
+    setName(member.name);
+    setEmail(member.email);
+    setRole(member.role);
+    setPassword('••••••••');
+  };
+
+  // Handle form submission (frontend-only, stored in browser)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
-      setDemoMessage('Please fill in both email and password.');
+      setDemoMessage('Please enter both an email address and a password.');
       return;
     }
 
     setDemoMessage(
-      `Frontend Demo: Signed in as "${email}" ${
-        rememberMe ? '(Remember me active)' : ''
-      }. Ready for PM, TL, or TM role routing!`
+      `Signed in as "${email}" with role "${role}". Workspace data is active in browser storage.`
     );
 
     if (onLogin) {
-      onLogin(email);
+      onLogin(email.trim(), role, name.trim());
     }
   };
 
@@ -55,21 +66,42 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
           </h1>
           <div className="mt-1 flex items-center justify-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
-              PMS Portal
+              Frontend Workspace Portal
             </span>
           </div>
           <p className="mt-3 text-sm text-slate-300">
-            Welcome back! Please enter your credentials to access your workspace.
+            Enter your credentials and select your role to access your local workspace.
           </p>
         </div>
 
         {/* Informational role pill (indicating single common login) */}
         <div className="mb-6 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2">
           <Info className="w-4 h-4 text-purple-400 shrink-0" />
-          <span>Universal portal for <strong>PM</strong>, <strong>TL</strong>, and <strong>TM</strong></span>
+          <span>Universal portal for <strong>Project Manager</strong>, <strong>Team Leader</strong>, <strong>Team Member</strong>, and <strong>Tester</strong></span>
         </div>
 
-        {/* Demo Message Banner */}
+        {/* Quick select existing registered members if any exist in localStorage */}
+        {teamMembers.length > 0 && (
+          <div className="mb-5 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+            <span className="text-slate-400 block mb-2 font-medium">Or select an existing team member:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {teamMembers.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleSelectExistingMember(m)}
+                  className="px-2.5 py-1 rounded-lg bg-[#141e4b] hover:bg-purple-600/30 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-[11px] flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="font-semibold text-purple-300">{m.avatarInitials}</span>
+                  <span>{m.name}</span>
+                  <span className="text-slate-400">({m.role === 'Project Manager' ? 'PM' : m.role === 'Team Leader' ? 'TL' : m.role === 'Tester' ? 'QA' : 'TM'})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Status Message Banner */}
         {demoMessage && (
           <div className="mb-5 p-3.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn">
             <CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
@@ -78,7 +110,28 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Full Name Field (Optional for display) */}
+          <div>
+            <label htmlFor="user-name" className="block text-sm font-medium text-slate-200 mb-1.5">
+              Full Name <span className="text-xs text-slate-400 font-normal">(optional)</span>
+            </label>
+            <div className="relative rounded-xl shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <User className="h-5 w-5" />
+              </div>
+              <input
+                id="user-name"
+                name="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Your Name"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+
           {/* Email Field */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-slate-200 mb-1.5">
@@ -97,8 +150,32 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@company.com"
-                className="w-full pl-11 pr-4 py-3 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
               />
+            </div>
+          </div>
+
+          {/* Workspace Role Selector */}
+          <div>
+            <label htmlFor="user-role" className="block text-sm font-medium text-slate-200 mb-1.5">
+              Workspace Role
+            </label>
+            <div className="relative rounded-xl shadow-sm">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Briefcase className="h-5 w-5" />
+              </div>
+              <select
+                id="user-role"
+                name="role"
+                value={role}
+                onChange={(e) => setRole(e.target.value as UserRole)}
+                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all cursor-pointer"
+              >
+                <option value="Project Manager">Project Manager (Full Governance & Final Approval)</option>
+                <option value="Team Leader">Team Leader (Task Review & Recommendation)</option>
+                <option value="Team Member">Team Member (Task Execution & Submission)</option>
+                <option value="Tester">Tester (QA, Retesting & Bug Tracking)</option>
+              </select>
             </div>
           </div>
 
@@ -120,7 +197,7 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-11 pr-11 py-3 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+                className="w-full pl-11 pr-11 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
               />
               <button
                 type="button"
@@ -154,13 +231,9 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
               </span>
             </label>
 
-            <button
-              type="button"
-              onClick={() => setDemoMessage('Password reset instructions would be sent in production.')}
-              className="text-xs sm:text-sm font-medium text-purple-400 hover:text-purple-300 transition-colors focus:outline-none underline-offset-4 hover:underline"
-            >
-              Forgot password?
-            </button>
+            <span className="text-xs text-slate-400">
+              Local Browser Session
+            </span>
           </div>
 
           {/* Sign In Button */}
@@ -169,15 +242,15 @@ export default function LoginPage({ onLogin }: LoginPageProps = {}) {
             id="sign-in-btn"
             className="w-full mt-2 py-3.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:ring-offset-2 focus:ring-offset-[#0f173b] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 group cursor-pointer"
           >
-            <span>Sign In</span>
+            <span>Enter PMS Workspace</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </form>
 
         {/* Footer Note */}
-        <div className="mt-7 text-center border-t border-slate-800/80 pt-4">
-          <p className="text-xs text-slate-400">
-            Secure login protected with role-based workspace permissions
+        <div className="mt-6 text-center border-t border-slate-800/80 pt-4">
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Frontend demonstration interface. All projects, tasks, reviews, and team data are saved in browser storage (<code className="text-purple-300">localStorage</code>).
           </p>
         </div>
 

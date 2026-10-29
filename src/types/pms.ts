@@ -16,13 +16,19 @@ export interface Project {
     completed: number;
     total: number;
   };
+  /** ID of the Team Leader assigned to this project */
+  teamLeaderId?: string;
+  /** IDs of Team Members assigned to this project */
+  teamMemberIds?: string[];
 }
+
+export type UserRole = 'Project Manager' | 'Team Leader' | 'Team Member' | 'Tester';
 
 export interface TaskReviewEntry {
   id: string;
-  authorRole: 'Team Member' | 'Team Leader' | 'Project Manager';
+  authorRole: UserRole;
   authorName: string;
-  action: 'submit' | 'request_corrections' | 'recommend_approval' | 'final_approve';
+  action: 'submit' | 'request_corrections' | 'recommend_approval' | 'final_approve' | 'fail_testing' | 'pass_testing';
   comment?: string;
   timestamp: string;
 }
@@ -30,7 +36,7 @@ export interface TaskReviewEntry {
 export interface TaskComment {
   id: string;
   authorName: string;
-  authorRole: 'Team Member' | 'Team Leader' | 'Project Manager' | string;
+  authorRole: UserRole | string;
   authorInitials?: string;
   content: string;
   timestamp: string;
@@ -58,6 +64,29 @@ export interface DemoSubmission {
   documents: TaskAttachment[];
 }
 
+export interface Subtask {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface Bug {
+  id: string;
+  taskId: string;
+  projectId: string;
+  title: string;
+  description: string;
+  severity: 'Critical' | 'High' | 'Medium' | 'Low';
+  reproductionSteps: string;
+  evidence?: TaskAttachment[];
+  assignedTo?: string; // Developer responsible for the task
+  reportedBy: string;  // Tester name
+  reportedAt: string;
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Fixed' | 'Retesting' | 'Verified' | 'Reopened';
+  resolutionNotes?: string;
+  updatedAt?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -72,13 +101,14 @@ export interface Task {
   comments?: TaskComment[];
   attachments?: TaskAttachment[];
   demoSubmission?: DemoSubmission;
+  subtasks?: Subtask[];
 }
 
 export interface TeamMember {
   id: string;
   name: string;
   email: string;
-  role: 'Project Manager' | 'Team Leader' | 'Team Member';
+  role: UserRole;
   department?: string;
   avatarInitials: string;
 }
@@ -92,6 +122,7 @@ export interface AppNotification {
   type: 'info' | 'success' | 'warning' | 'error';
   taskId?: string;
   projectId?: string;
+  bugId?: string;
 }
 
 export interface DashboardSummaryStats {
@@ -106,7 +137,7 @@ export interface DashboardSummaryStats {
 export interface UserProfile {
   name: string;
   email: string;
-  role: 'Project Manager' | 'Team Leader' | 'Team Member';
+  role: UserRole;
   department: string;
 }
 
@@ -115,6 +146,8 @@ export interface NotificationPreferences {
   reviewUpdates: boolean;
   correctionRequests: boolean;
   taskCompletion: boolean;
+  bugAssignments?: boolean;
+  bugStatusUpdates?: boolean;
 }
 
 export interface AppearanceSettings {
@@ -122,4 +155,5 @@ export interface AppearanceSettings {
   accentColor: 'purple' | 'indigo' | 'emerald' | 'blue';
   compactMode: boolean;
 }
+
 

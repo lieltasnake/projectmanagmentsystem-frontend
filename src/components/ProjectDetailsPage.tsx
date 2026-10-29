@@ -21,8 +21,13 @@ import {
   MessageSquare,
   Paperclip,
   ExternalLink,
+  Check,
+  LayoutList,
+  Kanban,
+  GripVertical,
+  AlertCircle,
 } from 'lucide-react';
-import type { Project, Task, TeamMember } from '../types/pms';
+import type { Project, Task, TeamMember, Bug } from '../types/pms';
 import TaskReviewModal, { type UserRole } from './TaskReviewModal';
 
 interface ProjectDetailsPageProps {
@@ -31,9 +36,12 @@ interface ProjectDetailsPageProps {
   teamMembers: TeamMember[];
   currentUserRole?: UserRole;
   currentUserName?: string;
+  bugs?: Bug[];
   onBack: () => void;
   onAddTask?: (task: Task) => void;
   onUpdateTask?: (task: Task) => void;
+  onAddBug?: (bug: Bug) => void;
+  onUpdateBug?: (bug: Bug) => void;
 }
 
 type TabId = 'overview' | 'tasks' | 'team';
@@ -158,9 +166,12 @@ export default function ProjectDetailsPage({
   teamMembers,
   currentUserRole = 'Project Manager',
   currentUserName = 'Workspace User',
+  bugs = [],
   onBack,
   onAddTask,
   onUpdateTask,
+  onAddBug,
+  onUpdateBug,
 }: ProjectDetailsPageProps) {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
@@ -177,6 +188,10 @@ export default function ProjectDetailsPage({
     status: 'Not Started' as Task['status'],
   });
   const [taskFormNotice, setTaskFormNotice] = useState<string | null>(null);
+  const [taskViewMode, setTaskViewMode] = useState<'list' | 'board'>('list');
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<Task['status'] | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
   const handleOpenTaskModal = () => {
     setTaskFormNotice(null);
@@ -199,6 +214,7 @@ export default function ProjectDetailsPage({
       priority: taskForm.priority,
       deadline: taskForm.deadline,
       status: taskForm.status,
+      subtasks: [],
     };
     if (onAddTask) {
       onAddTask(newTask);
@@ -210,10 +226,136 @@ export default function ProjectDetailsPage({
     }
   };
 
+  const handleToggleSubtask = (targetTask: Task, subtaskId: string) => {
+    if (!onUpdateTask) return;
+
+    const isTeamMember = currentUserRole === 'Team Member';
+    const isTeamLeader = currentUserRole === 'Team Leader';
+    const isProjectManager = currentUserRole === 'Project Manager';
+
+    const isAssigned = Boolean(
+      targetTask.assignedTo &&
+      targetTask.assignedTo.trim().toLowerCase() === currentUserName.trim().toLowerCase()
+    );
+
+    const canManage =
+      targetTask.status !== 'Completed' &&
+      (isProjectManager || isTeamLeader || (isTeamMember && isAssigned));
+
+    if (!canManage) return;
+
+    const currentSubtasks = targetTask.subtasks || [];
+    const updatedSubtasks = currentSubtasks.map((st) =>
+      st.id === subtaskId ? { ...st, completed: !st.completed } : st
+    );
+
+    // CRITICAL: Completing every subtask must NEVER automatically change
+    // the parent task status to 'Completed'. Parent status remains strictly unchanged.
+    const updatedTask: Task = {
+      ...targetTask,
+      subtasks: updatedSubtasks,
+    };
+
+    onUpdateTask(updatedTask);
+  };
+
+  const handleStatusChange = (task: Task, newStatus: Task['status']) => {
+    if (task.status === newStatus || !onUpdateTask) return;
+
+    if (newStatus === 'Completed' && currentUserRole !== 'Project Manager') {
+      setPermissionNotice(
+        'Permission Denied: Only the Project Manager can approve a task as Completed. Team Members must submit tasks for review.'
+      );
+      setTimeout(() => setPermissionNotice(null), 4000);
+      return;
+    }
+
+    const isAssigned = Boolean(
+      task.assignedTo &&
+      task.assignedTo.trim().toLowerCase() === currentUserName.trim().toLowerCase()
+    );
+
+    const canManage =
+      task.status !== 'Completed' &&
+      (currentUserRole === 'Project Manager' ||
+        currentUserRole === 'Team Leader' ||
+        (currentUserRole === 'Team Member' && isAssigned));
+
+    if (!canManage) {
+      setPermissionNotice('Permission Denied: You do not have permission to modify this task.');
+      setTimeout(() => setPermissionNotice(null), 4000);
+      return;
+    }
+
+    const history = [...(task.reviewHistory || [])];
+    let feedback = task.reviewFeedback;
+
+    if (newStatus === 'Completed' && currentUserRole === 'Project Manager') {
+      history.unshift({
+        id: `rev-${Date.now()}`,
+        authorRole: currentUserRole,
+        authorName: currentUserName,
+        action: 'final_approve',
+        comment: 'Task approved and completed via Project Board.',
+        timestamp: new Date().toLocaleString(),
+      });
+      feedback = `[Approved by PM ${currentUserName}]: Officially completed.`;
+    }
+
+    onUpdateTask({
+      ...task,
+      status: newStatus,
+      reviewFeedback: feedback,
+      reviewHistory: history,
+    });
+  };
+
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    e.dataTransfer.setData('text/plain', taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTaskId(taskId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, status: Task['status']) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverColumn !== status) setDragOverColumn(status);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetStatus: Task['status']) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+    setDraggedTaskId(null);
+    if (!taskId) return;
+
+    const targetTask = tasks.find((t) => t.id === taskId);
+    if (!targetTask) return;
+    handleStatusChange(targetTask, targetStatus);
+  };
+
+  const assignedTeamLeader = project.teamLeaderId
+    ? teamMembers.find((m) => m.id === project.teamLeaderId)
+    : null;
+
+  const assignedMembers = (project.teamMemberIds || [])
+    .map((id: string) => teamMembers.find((m: TeamMember) => m.id === id))
+    .filter((m): m is TeamMember => Boolean(m));
+
+  // Combine TL + members uniquely for project team display
+  const projectTeamMembers = [
+    ...(assignedTeamLeader ? [assignedTeamLeader] : []),
+    ...assignedMembers.filter((m: TeamMember) => m.id !== assignedTeamLeader?.id),
+  ];
+
   const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'tasks', label: `Tasks (${projectTasks.length})`, icon: CheckSquare },
-    { id: 'team', label: `Team (${teamMembers.length})`, icon: Users },
+    { id: 'team', label: `Team (${projectTeamMembers.length})`, icon: Users },
   ];
 
   const taskStats = {
@@ -411,6 +553,25 @@ export default function ProjectDetailsPage({
                 <span className="text-white font-semibold">{project.manager.name}</span>
               </div>
               <div>
+                <span className="text-slate-400 block">Team Leader</span>
+                {assignedTeamLeader ? (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                      {assignedTeamLeader.avatarInitials}
+                    </span>
+                    <span className="text-white font-semibold">{assignedTeamLeader.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500 italic">Not Assigned</span>
+                )}
+              </div>
+              <div>
+                <span className="text-slate-400 block">Assigned Members</span>
+                <span className="text-white font-semibold">
+                  {assignedMembers.length > 0 ? `${assignedMembers.length} member(s)` : 'None'}
+                </span>
+              </div>
+              <div>
                 <span className="text-slate-400 block">Start Date</span>
                 <span className="text-white">{project.startDate}</span>
               </div>
@@ -426,21 +587,70 @@ export default function ProjectDetailsPage({
       {/* Tasks Tab */}
       {activeTab === 'tasks' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
+          {permissionNotice && (
+            <div className="p-3 rounded-xl bg-rose-950/70 border border-rose-500/50 text-rose-200 text-xs flex items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{permissionNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPermissionNotice(null)}
+                className="text-rose-400 hover:text-white text-xs cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-white">Project Tasks</h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Tasks are completed only upon final PM approval.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleOpenTaskModal}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 transition-all cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Task</span>
-            </button>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {/* List / Board Switcher */}
+              <div className="bg-[#0b112c]/90 p-1 rounded-xl border border-slate-800 flex items-center gap-1 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setTaskViewMode('list')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    taskViewMode === 'list'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                  title="List View"
+                >
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>List</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTaskViewMode('board')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    taskViewMode === 'board'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                  title="Board View"
+                >
+                  <Kanban className="w-3.5 h-3.5" />
+                  <span>Board</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenTaskModal}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 transition-all cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Task</span>
+              </button>
+            </div>
           </div>
 
           {projectTasks.length === 0 ? (
@@ -453,7 +663,7 @@ export default function ProjectDetailsPage({
                 This project has no tasks. Click "Add Task" to create the first task.
               </p>
             </div>
-          ) : (
+          ) : taskViewMode === 'list' ? (
             <div className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 shadow-xl overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs text-slate-300">
@@ -492,7 +702,87 @@ export default function ProjectDetailsPage({
                                 Demo
                               </span>
                             )}
+                            {task.subtasks && task.subtasks.length > 0 && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+                                <CheckSquare className="w-2.5 h-2.5" />
+                                {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length} subtasks
+                              </span>
+                            )}
                           </div>
+                          {task.subtasks && task.subtasks.length > 0 && (
+                            <div className="mt-2 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2 max-w-md">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                                  <CheckSquare className="w-3.5 h-3.5 text-purple-400" />
+                                  <span>
+                                    {task.subtasks.filter((s) => s.completed).length} of {task.subtasks.length} subtasks completed
+                                  </span>
+                                </span>
+                                <span className="text-[10px] font-mono text-purple-300 font-semibold">
+                                  {Math.round((task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    task.subtasks.filter((s) => s.completed).length === task.subtasks.length
+                                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                                      : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                  }`}
+                                  style={{
+                                    width: `${Math.round(
+                                      (task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-1 max-h-32 overflow-y-auto pt-0.5">
+                                {task.subtasks.map((st) => {
+                                  const canManage =
+                                    task.status !== 'Completed' &&
+                                    (currentUserRole === 'Project Manager' ||
+                                      currentUserRole === 'Team Leader' ||
+                                      (currentUserRole === 'Team Member' &&
+                                        Boolean(
+                                          task.assignedTo &&
+                                            task.assignedTo.trim().toLowerCase() ===
+                                              currentUserName.trim().toLowerCase()
+                                        )));
+
+                                  return (
+                                    <div key={st.id} className="flex items-center gap-2 text-[11px]">
+                                      <button
+                                        type="button"
+                                        disabled={!canManage}
+                                        onClick={() => handleToggleSubtask(task, st.id)}
+                                        title={
+                                          canManage
+                                            ? st.completed
+                                              ? 'Mark subtask incomplete'
+                                              : 'Mark subtask complete'
+                                            : 'Read-only'
+                                        }
+                                        className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                                          st.completed
+                                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                                            : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                                        } ${canManage ? 'cursor-pointer' : 'cursor-default'}`}
+                                      >
+                                        {st.completed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                      </button>
+                                      <span
+                                        className={`truncate ${
+                                          st.completed ? 'text-slate-400 line-through' : 'text-slate-200'
+                                        }`}
+                                      >
+                                        {st.title}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                           {task.reviewFeedback && (
                             <div className="mt-1 text-[10px] text-purple-300/80 line-clamp-1 italic">
                               Note: {task.reviewFeedback}
@@ -536,6 +826,87 @@ export default function ProjectDetailsPage({
                 </table>
               </div>
             </div>
+          ) : (
+            /* Project Details Board View */
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+              {TASK_STATUSES.map((statusKey) => {
+                const columnTasks = projectTasks.filter((t) => t.status === statusKey);
+                const isDropTarget = dragOverColumn === statusKey;
+
+                return (
+                  <div
+                    key={statusKey}
+                    onDragOver={(e) => handleDragOver(e, statusKey)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, statusKey)}
+                    className={`rounded-2xl bg-[#0f173b]/95 border transition-all flex flex-col min-h-[380px] shadow-xl ${
+                      isDropTarget
+                        ? 'border-purple-500 ring-2 ring-purple-500/30 bg-[#141d4b]'
+                        : 'border-slate-700/70'
+                    }`}
+                  >
+                    <div className="p-3.5 border-b border-slate-800 bg-[#0b112c]/90 rounded-t-2xl flex items-center justify-between">
+                      <span className="font-bold text-xs uppercase tracking-wider text-white">
+                        {statusKey}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                        {columnTasks.length}
+                      </span>
+                    </div>
+
+                    <div className="p-3 space-y-3 flex-1 overflow-y-auto max-h-[500px]">
+                      {columnTasks.length === 0 ? (
+                        <div className="h-28 rounded-xl border border-dashed border-slate-800/80 flex items-center justify-center text-slate-500 text-xs">
+                          Drop tasks here
+                        </div>
+                      ) : (
+                        columnTasks.map((task) => (
+                          <div
+                            key={task.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, task.id)}
+                            className="p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-purple-500/60 shadow-md space-y-2 cursor-grab active:cursor-grabbing group hover:shadow-purple-500/10 transition-all"
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {task.id}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {getPriorityBadge(task.priority)}
+                                <GripVertical className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400" />
+                              </div>
+                            </div>
+                            <h4 className="text-xs font-bold text-white break-words">
+                              {task.title}
+                            </h4>
+                            {task.subtasks && task.subtasks.length > 0 && (
+                              <div className="text-[10px] text-purple-300 flex items-center gap-1 pt-1 border-t border-slate-800">
+                                <CheckSquare className="w-3 h-3 text-purple-400" />
+                                <span>
+                                  {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length} subtasks
+                                </span>
+                              </div>
+                            )}
+                            <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400 truncate max-w-[90px]">
+                                {task.assignedTo || 'Unassigned'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setReviewingTask(task)}
+                                className="px-2 py-0.5 rounded text-[10px] bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/35 cursor-pointer font-semibold"
+                              >
+                                {task.status === 'Completed' ? 'Details' : 'Review'}
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           {/* Review and Approval Modal */}
@@ -545,11 +916,14 @@ export default function ProjectDetailsPage({
               project={project}
               currentUserRole={currentUserRole}
               currentUserName={currentUserName}
+              bugs={bugs}
               onClose={() => setReviewingTask(null)}
               onUpdateTask={(updated) => {
                 if (onUpdateTask) onUpdateTask(updated);
-                setReviewingTask(null);
+                setReviewingTask(updated);
               }}
+              onAddBug={onAddBug}
+              onUpdateBug={onUpdateBug}
             />
           )}
         </div>
@@ -561,36 +935,52 @@ export default function ProjectDetailsPage({
           <div>
             <h3 className="text-base font-bold text-white">Project Team</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Members assigned to this project. Team assignment requires backend connection.
+              Assigned Team Leader and Team Members registered for this project.
             </p>
           </div>
-          {teamMembers.length === 0 ? (
+          {projectTeamMembers.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-10 text-center flex flex-col items-center justify-center min-h-[280px]">
               <div className="w-14 h-14 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
                 <Users className="w-7 h-7" />
               </div>
-              <h4 className="text-base font-bold text-white">No team members</h4>
+              <h4 className="text-base font-bold text-white">No team members assigned</h4>
               <p className="mt-2 text-xs text-slate-400 max-w-sm leading-relaxed">
-                No team members assigned. This will be available when the backend is connected.
+                No Team Leader or Team Members have been assigned to this project yet.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {teamMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-4 flex items-center gap-3 hover:border-purple-500/40 transition-all shadow-lg"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-sm flex items-center justify-center shadow-md shadow-purple-500/20 shrink-0">
-                    {member.avatarInitials}
+              {projectTeamMembers.map((member) => {
+                const isTL = member.id === project.teamLeaderId;
+                return (
+                  <div
+                    key={member.id}
+                    className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-4 flex items-center gap-3 hover:border-purple-500/40 transition-all shadow-lg"
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-xl text-white font-bold text-sm flex items-center justify-center shadow-md shrink-0 ${
+                        isTL
+                          ? 'bg-gradient-to-tr from-amber-500 to-orange-500 shadow-amber-500/20'
+                          : 'bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-purple-500/20'
+                      }`}
+                    >
+                      {member.avatarInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white truncate">{member.name}</span>
+                        {isTL && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Team Leader
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-purple-300">{member.role}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{member.email}</div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-white truncate">{member.name}</div>
-                    <div className="text-[11px] text-purple-300">{member.role}</div>
-                    <div className="text-[10px] text-slate-400 truncate">{member.email}</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

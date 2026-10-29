@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   ShieldCheck,
@@ -25,6 +25,13 @@ import {
   Eye,
   AlertTriangle,
   FileCheck,
+  CheckSquare,
+  Plus,
+  Edit2,
+  Check,
+  Bug as BugIcon,
+  AlertOctagon,
+  CheckCheck,
 } from 'lucide-react';
 import type {
   Task,
@@ -33,17 +40,23 @@ import type {
   TaskComment,
   TaskAttachment,
   DemoSubmission,
+  Subtask,
+  Bug,
+  UserRole,
 } from '../types/pms';
 
-export type UserRole = 'Project Manager' | 'Team Leader' | 'Team Member';
+export type { UserRole };
 
 interface TaskReviewModalProps {
   task: Task;
   project?: Project;
   currentUserRole: UserRole;
   currentUserName: string;
+  bugs?: Bug[];
   onClose: () => void;
   onUpdateTask: (updatedTask: Task) => void;
+  onAddBug?: (bug: Bug) => void;
+  onUpdateBug?: (bug: Bug) => void;
 }
 
 // Helpers
@@ -80,13 +93,22 @@ export default function TaskReviewModal({
   project,
   currentUserRole,
   currentUserName,
+  bugs = [],
   onClose,
   onUpdateTask,
+  onAddBug,
+  onUpdateBug,
 }: TaskReviewModalProps) {
-  const [activeTab, setActiveTab] = useState<'workflow' | 'comments' | 'attachments' | 'history'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'subtasks' | 'bugs' | 'comments' | 'attachments' | 'history'>('workflow');
   const [commentText, setCommentText] = useState('');
   const [newCommentInput, setNewCommentInput] = useState('');
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+
+  // Subtasks State
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
+  const [subtaskNotice, setSubtaskNotice] = useState<string | null>(null);
 
   // General Attachment Upload State
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -107,10 +129,124 @@ export default function TaskReviewModal({
   const isTeamMember = currentUserRole === 'Team Member';
   const isTeamLeader = currentUserRole === 'Team Leader';
   const isProjectManager = currentUserRole === 'Project Manager';
+  const isTester = currentUserRole === 'Tester';
 
   const canSubmitForReview = isTeamMember && task.status !== 'Completed' && task.status !== 'Under Review';
   const canTeamLeaderReview = isTeamLeader && task.status === 'Under Review';
   const canProjectManagerReview = isProjectManager && task.status !== 'Completed';
+  const canTesterReview = isTester && task.status === 'Under Review';
+
+  // Task bug metrics
+  const taskBugs = useMemo(() => bugs.filter((b: Bug) => b.taskId === task.id), [bugs, task.id]);
+  const openTaskBugs = useMemo(() => taskBugs.filter((b: Bug) => b.status !== 'Verified'), [taskBugs]);
+
+  // Inline Bug Report form state
+  const [showInlineBugForm, setShowInlineBugForm] = useState(false);
+  const [inlineBugTitle, setInlineBugTitle] = useState('');
+  const [inlineBugSeverity, setInlineBugSeverity] = useState<Bug['severity']>('Medium');
+  const [inlineBugDesc, setInlineBugDesc] = useState('');
+  const [inlineBugSteps, setInlineBugSteps] = useState('');
+
+  // Subtask management authorization
+  const isAssigned = Boolean(
+    task.assignedTo &&
+    task.assignedTo.trim().toLowerCase() === currentUserName.trim().toLowerCase()
+  );
+
+  const canManageSubtasks =
+    task.status !== 'Completed' &&
+    (isProjectManager ||
+      isTeamLeader ||
+      (isTeamMember && isAssigned));
+
+  // Subtask metrics
+  const subtasks = task.subtasks || [];
+  const totalSubtasks = subtasks.length;
+  const completedSubtasksCount = subtasks.filter((s) => s.completed).length;
+  const subtaskProgressPercent =
+    totalSubtasks > 0 ? Math.round((completedSubtasksCount / totalSubtasks) * 100) : 0;
+
+  // ── Subtask Handlers ──
+  const handleAddSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canManageSubtasks) return;
+    const title = newSubtaskTitle.trim();
+    if (!title) return;
+
+    const newSubtask: Subtask = {
+      id: `subtask-${Date.now()}`,
+      title,
+      completed: false,
+    };
+
+    const updatedTask: Task = {
+      ...task,
+      subtasks: [...subtasks, newSubtask],
+    };
+
+    onUpdateTask(updatedTask);
+    setNewSubtaskTitle('');
+    setSubtaskNotice(`Subtask "${title}" added.`);
+    setTimeout(() => setSubtaskNotice(null), 3000);
+  };
+
+  const handleToggleSubtask = (subtaskId: string) => {
+    if (!canManageSubtasks) return;
+    const updatedSubtasks = subtasks.map((s) =>
+      s.id === subtaskId ? { ...s, completed: !s.completed } : s
+    );
+
+    // CRITICAL: Completing every subtask must NEVER automatically change
+    // the parent task status to 'Completed'. Parent status remains strictly unchanged.
+    const updatedTask: Task = {
+      ...task,
+      subtasks: updatedSubtasks,
+    };
+
+    onUpdateTask(updatedTask);
+  };
+
+  const handleStartEditSubtask = (subtask: Subtask) => {
+    if (!canManageSubtasks) return;
+    setEditingSubtaskId(subtask.id);
+    setEditingSubtaskTitle(subtask.title);
+  };
+
+  const handleSaveSubtaskEdit = (subtaskId: string) => {
+    if (!canManageSubtasks) return;
+    const title = editingSubtaskTitle.trim();
+    if (!title) return;
+
+    const updatedSubtasks = subtasks.map((s) =>
+      s.id === subtaskId ? { ...s, title } : s
+    );
+
+    const updatedTask: Task = {
+      ...task,
+      subtasks: updatedSubtasks,
+    };
+
+    onUpdateTask(updatedTask);
+    setEditingSubtaskId(null);
+    setEditingSubtaskTitle('');
+  };
+
+  const handleCancelSubtaskEdit = () => {
+    setEditingSubtaskId(null);
+    setEditingSubtaskTitle('');
+  };
+
+  const handleDeleteSubtask = (subtaskId: string) => {
+    if (!canManageSubtasks) return;
+    const updatedSubtasks = subtasks.filter((s) => s.id !== subtaskId);
+
+    const updatedTask: Task = {
+      ...task,
+      subtasks: updatedSubtasks,
+    };
+
+    onUpdateTask(updatedTask);
+  };
 
   // ── Comment Handler ──
   const handleAddComment = (e: React.FormEvent) => {
@@ -463,6 +599,48 @@ export default function TaskReviewModal({
 
             <button
               type="button"
+              onClick={() => setActiveTab('subtasks')}
+              className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
+                activeTab === 'subtasks'
+                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>Subtasks</span>
+              {totalSubtasks > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+                  {completedSubtasksCount}/{totalSubtasks}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('bugs')}
+              className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
+                activeTab === 'bugs'
+                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <BugIcon className="w-4 h-4" />
+              <span>Bugs</span>
+              {taskBugs.length > 0 && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    openTaskBugs.length > 0
+                      ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40'
+                      : 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+                  }`}
+                >
+                  {taskBugs.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('comments')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'comments'
@@ -568,6 +746,59 @@ export default function TaskReviewModal({
                   </div>
                 )}
               </div>
+
+              {/* ── Subtask Review Inspection Summary ── */}
+              {totalSubtasks > 0 && (
+                <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-white flex items-center gap-1.5">
+                      <CheckSquare className="w-4 h-4 text-purple-400" />
+                      Subtask Progress ({completedSubtasksCount} of {totalSubtasks} completed)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('subtasks')}
+                      className="text-[11px] text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+                    >
+                      Manage Subtasks →
+                    </button>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        completedSubtasksCount === totalSubtasks
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                      }`}
+                      style={{ width: `${subtaskProgressPercent}%` }}
+                    />
+                  </div>
+                  {/* Checklist preview */}
+                  <div className="space-y-1 max-h-32 overflow-y-auto pt-1">
+                    {subtasks.map((st) => (
+                      <div key={st.id} className="flex items-center gap-2 text-[11px]">
+                        <button
+                          type="button"
+                          disabled={!canManageSubtasks}
+                          onClick={() => handleToggleSubtask(st.id)}
+                          className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
+                            st.completed
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                              : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                          } ${canManageSubtasks ? 'cursor-pointer' : 'cursor-default'}`}
+                          title={canManageSubtasks ? (st.completed ? 'Mark incomplete' : 'Mark complete') : 'Read only'}
+                        >
+                          {st.completed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                        </button>
+                        <span className={`truncate ${st.completed ? 'text-slate-400 line-through' : 'text-slate-200'}`}>
+                          {st.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* ── Demo Submission Evidence Display (if submitted) ── */}
               {task.demoSubmission && (
@@ -937,6 +1168,61 @@ export default function TaskReviewModal({
                   </div>
                 )}
 
+                {/* Quality Warning if Open Bugs Exist */}
+                {openTaskBugs.length > 0 && (
+                  <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2.5">
+                    <AlertOctagon className="w-4.5 h-4.5 text-rose-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-300">
+                        {openTaskBugs.length} Unresolved Bug{openTaskBugs.length > 1 ? 's' : ''} Linked
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-rose-300/80">
+                        All reported defects must be Fixed by the developer and Verified by QA before this task can be approved. Completing subtasks or fixing bugs will not complete the task.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tester Review Actions */}
+                {canTesterReview && (
+                  <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/30 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <BugIcon className="w-4 h-4" />
+                        Tester QA Evaluation
+                      </span>
+                      <span className="text-[11px] text-slate-400">Step 2: QA Testing</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleWorkflowAction('request_corrections')}
+                        className="py-2.5 px-3 rounded-xl font-semibold text-xs text-amber-200 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Fail QA (Return to In Progress)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (openTaskBugs.length > 0) {
+                            setActionNotice(
+                              `Cannot pass QA: There are ${openTaskBugs.length} unresolved bug(s). Please verify all fixes in the Bugs tab first.`
+                            );
+                            return;
+                          }
+                          handleWorkflowAction('recommend_approval');
+                        }}
+                        className="py-2.5 px-3 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        <span>Pass QA (Forward to TL/PM)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Team Leader Review Actions */}
                 {canTeamLeaderReview && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -974,7 +1260,15 @@ export default function TaskReviewModal({
 
                     <button
                       type="button"
-                      onClick={() => handleWorkflowAction('final_approve')}
+                      onClick={() => {
+                        if (openTaskBugs.length > 0) {
+                          const confirmComplete = confirm(
+                            `Warning: This task has ${openTaskBugs.length} unresolved bug(s). As Project Manager, are you sure you want to grant final approval and mark Completed?`
+                          );
+                          if (!confirmComplete) return;
+                        }
+                        handleWorkflowAction('final_approve');
+                      }}
                       className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -987,7 +1281,13 @@ export default function TaskReviewModal({
                 {isTeamMember && task.status === 'Under Review' && (
                   <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Your submission is actively under review by the Team Leader and Project Manager.</span>
+                    <span>Your submission is actively under review by Tester, Team Leader, and Project Manager.</span>
+                  </div>
+                )}
+                {isTester && task.status !== 'Under Review' && task.status !== 'Completed' && (
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>Task is currently in development ({task.status}). Testing starts when submitted for review.</span>
                   </div>
                 )}
                 {isTeamLeader && task.status !== 'Under Review' && task.status !== 'Completed' && (
@@ -997,6 +1297,500 @@ export default function TaskReviewModal({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════
+              TAB: SUBTASKS (CHECKLIST & PROGRESS)
+          ═══════════════════════════════════════════════════ */}
+          {activeTab === 'subtasks' && (
+            <div className="space-y-4">
+              {/* Progress Summary Card */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <CheckSquare className="w-4 h-4 text-purple-400" />
+                    Subtasks Progress
+                  </span>
+                  <span className="font-semibold text-purple-300">
+                    {totalSubtasks === 0
+                      ? 'No subtasks created'
+                      : `${completedSubtasksCount} of ${totalSubtasks} completed (${subtaskProgressPercent}%)`}
+                  </span>
+                </div>
+                {totalSubtasks > 0 && (
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden mt-1">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        completedSubtasksCount === totalSubtasks
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                      }`}
+                      style={{ width: `${subtaskProgressPercent}%` }}
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-400 pt-1">
+                  Subtasks break down complex work into concrete items.
+                  Note: Completing all subtasks does not automatically complete the parent task; final approval remains with the Project Manager.
+                </p>
+              </div>
+
+              {subtaskNotice && (
+                <div className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span>{subtaskNotice}</span>
+                </div>
+              )}
+
+              {/* Add Subtask Form */}
+              {canManageSubtasks ? (
+                <form onSubmit={handleAddSubtask} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    placeholder="Enter a new subtask (e.g. Design wireframes, Review code)..."
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newSubtaskTitle.trim()}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-purple-600/25 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Subtask</span>
+                  </button>
+                </form>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span>
+                    {task.status === 'Completed'
+                      ? 'This task has been completed and approved. Subtasks are in read-only mode.'
+                      : 'Subtasks can be modified by the assigned team member, Team Leader, or Project Manager.'}
+                  </span>
+                </div>
+              )}
+
+              {/* Subtasks List */}
+              {totalSubtasks === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center">
+                  <CheckSquare className="w-8 h-8 text-slate-600 mb-2" />
+                  <p className="text-xs font-medium text-slate-300">No subtasks added yet</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs">
+                    {canManageSubtasks
+                      ? 'Add subtasks above to track actionable steps towards completing this task.'
+                      : 'No subtasks have been created for this task yet.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {subtasks.map((st) => {
+                    const isEditing = editingSubtaskId === st.id;
+
+                    return (
+                      <div
+                        key={st.id}
+                        className={`p-3 rounded-xl border transition-all flex items-center gap-3 ${
+                          st.completed
+                            ? 'bg-slate-900/40 border-slate-800/80'
+                            : 'bg-slate-900/90 border-slate-700/60 shadow-sm'
+                        }`}
+                      >
+                        {/* Checkbox toggle */}
+                        <button
+                          type="button"
+                          disabled={!canManageSubtasks}
+                          onClick={() => handleToggleSubtask(st.id)}
+                          title={canManageSubtasks ? (st.completed ? 'Mark incomplete' : 'Mark complete') : 'Read only'}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors shrink-0 ${
+                            canManageSubtasks ? 'cursor-pointer' : 'cursor-default'
+                          } ${
+                            st.completed
+                              ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+                              : 'border-2 border-slate-600 hover:border-purple-500 bg-slate-800/60'
+                          }`}
+                        >
+                          {st.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </button>
+
+                        {/* Title or Edit Input */}
+                        <div className="flex-1 min-w-0">
+                          {isEditing ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editingSubtaskTitle}
+                                onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveSubtaskEdit(st.id);
+                                  if (e.key === 'Escape') handleCancelSubtaskEdit();
+                                }}
+                                autoFocus
+                                className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-purple-500 text-white focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveSubtaskEdit(st.id)}
+                                className="p-1 rounded text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 cursor-pointer"
+                                title="Save"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelSubtaskEdit}
+                                className="p-1 rounded text-slate-400 hover:text-slate-300 hover:bg-slate-800 cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className={`text-xs block break-words ${
+                                st.completed
+                                  ? 'text-slate-400 line-through'
+                                  : 'text-white font-medium'
+                              }`}
+                            >
+                              {st.title}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Action buttons (Edit / Delete) */}
+                        {canManageSubtasks && !isEditing && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditSubtask(st)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Edit subtask"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSubtask(st.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                              title="Delete subtask"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════
+              TAB: TASK BUGS & DEFECTS
+          ═══════════════════════════════════════════════════ */}
+          {activeTab === 'bugs' && (
+            <div className="space-y-4">
+              {/* Top Banner & Report Button */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                    <BugIcon className="w-4 h-4 text-rose-400" />
+                    <span>Defects Linked to Task</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    {openTaskBugs.length} unresolved / {taskBugs.length} total defect{taskBugs.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInlineBugForm(!showInlineBugForm)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showInlineBugForm ? 'Close Form' : 'Report Bug'}</span>
+                </button>
+              </div>
+
+              {/* Inline Bug Report Form */}
+              {showInlineBugForm && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!inlineBugTitle.trim() || !inlineBugDesc.trim() || !inlineBugSteps.trim()) {
+                      alert('Please provide a title, description, and reproduction steps.');
+                      return;
+                    }
+                    if (onAddBug) {
+                      const timestamp = new Date().toLocaleString();
+                      const newBug: Bug = {
+                        id: `BUG-${Date.now().toString().slice(-4)}`,
+                        taskId: task.id,
+                        projectId: task.projectId,
+                        title: inlineBugTitle.trim(),
+                        description: inlineBugDesc.trim(),
+                        severity: inlineBugSeverity,
+                        reproductionSteps: inlineBugSteps.trim(),
+                        assignedTo: task.assignedTo,
+                        reportedBy: currentUserName,
+                        reportedAt: timestamp,
+                        status: task.assignedTo ? 'Assigned' : 'Open',
+                      };
+                      onAddBug(newBug);
+                      setInlineBugTitle('');
+                      setInlineBugDesc('');
+                      setInlineBugSteps('');
+                      setShowInlineBugForm(false);
+                    }
+                  }}
+                  className="p-4 rounded-xl bg-slate-900/90 border border-rose-500/40 space-y-3"
+                >
+                  <h5 className="text-xs font-bold text-rose-300">File Defect on Task "{task.title}"</h5>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Bug Title *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={inlineBugTitle}
+                        onChange={(e) => setInlineBugTitle(e.target.value)}
+                        placeholder="e.g. Button misaligned on mobile screens"
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Severity *
+                      </label>
+                      <select
+                        value={inlineBugSeverity}
+                        onChange={(e) => setInlineBugSeverity(e.target.value as Bug['severity'])}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white"
+                      >
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Description *
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      value={inlineBugDesc}
+                      onChange={(e) => setInlineBugDesc(e.target.value)}
+                      placeholder="Describe what occurs and why it violates acceptance criteria..."
+                      className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Steps to Reproduce *
+                    </label>
+                    <textarea
+                      rows={2}
+                      required
+                      value={inlineBugSteps}
+                      onChange={(e) => setInlineBugSteps(e.target.value)}
+                      placeholder="1. Open modal... 2. Click submit... Expected: ..., Actual: ..."
+                      className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 font-mono text-[11px]"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowInlineBugForm(false)}
+                      className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500"
+                    >
+                      Submit Defect
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Bugs List */}
+              {taskBugs.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-slate-800 rounded-xl space-y-1.5">
+                  <BugIcon className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs font-medium text-slate-400">No bugs logged for this task.</p>
+                  <p className="text-[11px] text-slate-500">
+                    If defects or discrepancies are discovered during QA testing, report them here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {taskBugs.map((b: Bug) => (
+                    <div
+                      key={b.id}
+                      className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30">
+                            {b.id}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              b.severity === 'Critical'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : b.severity === 'High'
+                                ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                                : b.severity === 'Medium'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                            }`}
+                          >
+                            {b.severity}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              b.status === 'Verified'
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : b.status === 'Fixed'
+                                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
+                                : b.status === 'Retesting'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-slate-700/40 text-slate-300 border border-slate-600/50'
+                            }`}
+                          >
+                            {b.status}
+                          </span>
+                        </div>
+
+                        <span className="text-[10px] text-slate-500">{b.reportedAt}</span>
+                      </div>
+
+                      <h5 className="font-bold text-white text-xs">{b.title}</h5>
+                      <p className="text-slate-300 text-xs">{b.description}</p>
+
+                      <div className="p-2 rounded bg-slate-950/60 border border-slate-800/80 font-mono text-[11px] text-slate-300">
+                        <span className="text-slate-500 block mb-0.5">Reproduction:</span>
+                        {b.reproductionSteps}
+                      </div>
+
+                      {b.resolutionNotes && (
+                        <div className="p-2 rounded bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 text-[11px]">
+                          <strong>Fix/Retest Note:</strong> {b.resolutionNotes}
+                        </div>
+                      )}
+
+                      {/* Quick Action Transitions */}
+                      {onUpdateBug && (
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-800">
+                          <span className="text-[11px] text-slate-400">
+                            Assigned: <strong className="text-white">{b.assignedTo || 'Unassigned'}</strong>
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {(b.status === 'Open' || b.status === 'Assigned') && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateBug({
+                                    ...b,
+                                    status: 'In Progress',
+                                    updatedAt: new Date().toLocaleString(),
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white"
+                              >
+                                Start Fix
+                              </button>
+                            )}
+
+                            {(b.status === 'In Progress' || b.status === 'Reopened') && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateBug({
+                                    ...b,
+                                    status: 'Fixed',
+                                    resolutionNotes: `[Fixed by ${currentUserName}]`,
+                                    updatedAt: new Date().toLocaleString(),
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-teal-600 hover:bg-teal-500 text-white"
+                              >
+                                Mark Fixed
+                              </button>
+                            )}
+
+                            {b.status === 'Fixed' && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateBug({
+                                    ...b,
+                                    status: 'Retesting',
+                                    resolutionNotes: `[Retest Requested by ${currentUserName}]`,
+                                    updatedAt: new Date().toLocaleString(),
+                                  })
+                                }
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-600 hover:bg-amber-500 text-white"
+                              >
+                                Send Retest
+                              </button>
+                            )}
+
+                            {(b.status === 'Retesting' || b.status === 'Fixed') && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onUpdateBug({
+                                      ...b,
+                                      status: 'Verified',
+                                      resolutionNotes: `[Verified by ${currentUserName}]`,
+                                      updatedAt: new Date().toLocaleString(),
+                                    })
+                                  }
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                                >
+                                  Verify Fix
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onUpdateBug({
+                                      ...b,
+                                      status: 'Reopened',
+                                      resolutionNotes: `[Reopened by ${currentUserName}]`,
+                                      updatedAt: new Date().toLocaleString(),
+                                    })
+                                  }
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
+                                >
+                                  Reopen
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

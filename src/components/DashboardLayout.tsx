@@ -6,6 +6,7 @@ import TeamPage from './TeamPage';
 import NotificationsPage from './NotificationsPage';
 import ReportsPage from './ReportsPage';
 import SettingsPage from './SettingsPage';
+import TestingDashboardPage from './TestingDashboardPage';
 import type {
   Project,
   Task,
@@ -13,6 +14,8 @@ import type {
   AppNotification,
   DashboardSummaryStats,
   UserProfile,
+  UserRole,
+  Bug,
   NotificationPreferences,
   AppearanceSettings,
 } from '../types/pms';
@@ -42,6 +45,7 @@ import {
   ArrowRight,
   Activity,
   CheckCircle2,
+  Bug as BugIcon,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -66,13 +70,18 @@ interface DashboardLayoutProps {
   onUpdateNotificationPreferences?: (updated: NotificationPreferences) => void;
   appearanceSettings?: AppearanceSettings;
   onUpdateAppearance?: (updated: AppearanceSettings) => void;
+  bugs?: Bug[];
   onLogout?: () => void;
   onAddProject?: (project: Project) => void;
+  onUpdateProject?: (project: Project) => void;
   onAddTask?: (task: Task) => void;
   onUpdateTask?: (task: Task) => void;
   onAddMember?: (member: TeamMember) => void;
   onUpdateMember?: (member: TeamMember) => void;
   onRemoveMember?: (memberId: string) => void;
+  onAddBug?: (bug: Bug) => void;
+  onUpdateBug?: (bug: Bug) => void;
+  onDeleteBug?: (bugId: string) => void;
 }
 
 export default function DashboardLayout({
@@ -90,30 +99,38 @@ export default function DashboardLayout({
   onUpdateNotificationPreferences: propOnUpdateNotifPreferences,
   appearanceSettings: propAppearanceSettings,
   onUpdateAppearance: propOnUpdateAppearance,
+  bugs = [],
   onLogout,
   onAddProject,
+  onUpdateProject: _onUpdateProject,
   onAddTask,
   onUpdateTask,
   onAddMember,
   onUpdateMember,
   onRemoveMember,
+  onAddBug,
+  onUpdateBug,
+  onDeleteBug,
 }: DashboardLayoutProps = {}) {
-  const [activeItem, setActiveItem] = useState('dashboard');
+  const [activeItem, setActiveItem] = useState(userRole === 'Tester' ? 'testing' : 'dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeRole, setActiveRole] = useState<'Project Manager' | 'Team Leader' | 'Team Member'>(
-    userRole === 'Team Leader' || userRole === 'Team Member' ? userRole : 'Project Manager'
-  );
+  const [activeRole, setActiveRole] = useState<UserRole>(() => {
+    if (userRole === 'Team Leader' || userRole === 'Team Member' || userRole === 'Tester') {
+      return userRole;
+    }
+    return 'Project Manager';
+  });
 
   // User Profile state (uses shared props when provided, with in-memory fallback)
   const [internalUserProfile, setInternalUserProfile] = useState<UserProfile>(() => {
-    const defaultName = userName || (userEmail ? userEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Alex Morgan');
+    const defaultName = userName || (userEmail ? userEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Workspace User');
     return {
       name: defaultName,
-      email: userEmail || 'alex.morgan@pmsworkspace.io',
+      email: userEmail || 'user@workspace.local',
       role: userRole === 'Team Leader' || userRole === 'Team Member' ? userRole : 'Project Manager',
-      department: 'Engineering & Delivery',
+      department: 'Operations',
     };
   });
 
@@ -145,6 +162,39 @@ export default function DashboardLayout({
     setSelectedProject(project);
     setActiveItem('projects');
   };
+
+  // ── Role-based project visibility ──
+  // PM sees all projects; TL sees projects where they are the assigned TL;
+  // TM sees projects where they are in the assigned team member list.
+  const currentMember = useMemo(
+    () => teamMembers.find(
+      (m) => m.email.toLowerCase() === (userProfile.email || '').toLowerCase()
+            || m.name.toLowerCase() === (userProfile.name || '').toLowerCase()
+    ),
+    [teamMembers, userProfile.email, userProfile.name]
+  );
+
+  const visibleProjects = useMemo(() => {
+    if (activeRole === 'Project Manager' || activeRole === 'Tester') return projects;
+    if (!currentMember) return [];
+    return projects.filter((p) => {
+      if (activeRole === 'Team Leader') {
+        return p.teamLeaderId === currentMember.id;
+      }
+      // Team Member
+      return p.teamMemberIds?.includes(currentMember.id) ?? false;
+    });
+  }, [projects, activeRole, currentMember]);
+
+  const visibleProjectIds = useMemo(
+    () => new Set(visibleProjects.map((p) => p.id)),
+    [visibleProjects]
+  );
+
+  const visibleTasks = useMemo(() => {
+    if (activeRole === 'Project Manager') return tasks;
+    return tasks.filter((t) => visibleProjectIds.has(t.projectId));
+  }, [tasks, activeRole, visibleProjectIds]);
 
   // Compute stats dynamically from real data: display 0 when count is 0, never '—'
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -388,9 +438,75 @@ export default function DashboardLayout({
       }
     });
 
+    // 7. Bug Notifications (Routing, Retesting, Reopening, Verification)
+    bugs.forEach((bug) => {
+      const task = tasks.find((t) => t.id === bug.taskId);
+      const taskTitle = task?.title || bug.taskId;
+
+      // New / Assigned Bug Notification
+      if (bug.status === 'Open' || bug.status === 'Assigned') {
+        notifs.push({
+          id: `notif-bug-assigned-${bug.id}`,
+          title: `Defect Assigned (${bug.severity})`,
+          message: `"${bug.title}" linked to "${taskTitle}" assigned to ${bug.assignedTo || 'developer'} (reported by ${bug.reportedBy}).`,
+          timestamp: bug.reportedAt || todayStr,
+          read: false,
+          type: bug.severity === 'Critical' ? 'error' : 'warning',
+          taskId: bug.taskId,
+          projectId: bug.projectId,
+          bugId: bug.id,
+        });
+      }
+
+      // Bug ready for retesting
+      if (bug.status === 'Retesting') {
+        notifs.push({
+          id: `notif-bug-retest-${bug.id}`,
+          title: 'Defect Ready for Retest',
+          message: `"${bug.title}" on "${taskTitle}" has been marked Fixed and is awaiting QA verification.`,
+          timestamp: bug.updatedAt || todayStr,
+          read: false,
+          type: 'info',
+          taskId: bug.taskId,
+          projectId: bug.projectId,
+          bugId: bug.id,
+        });
+      }
+
+      // Bug reopened
+      if (bug.status === 'Reopened') {
+        notifs.push({
+          id: `notif-bug-reopened-${bug.id}`,
+          title: 'Defect Reopened',
+          message: `"${bug.title}" on "${taskTitle}" failed retesting and has been reopened for rework.`,
+          timestamp: bug.updatedAt || todayStr,
+          read: false,
+          type: 'error',
+          taskId: bug.taskId,
+          projectId: bug.projectId,
+          bugId: bug.id,
+        });
+      }
+
+      // Bug verified
+      if (bug.status === 'Verified') {
+        notifs.push({
+          id: `notif-bug-verified-${bug.id}`,
+          title: 'Defect Verified by QA',
+          message: `"${bug.title}" on "${taskTitle}" passed all retest verification criteria.`,
+          timestamp: bug.updatedAt || todayStr,
+          read: false,
+          type: 'success',
+          taskId: bug.taskId,
+          projectId: bug.projectId,
+          bugId: bug.id,
+        });
+      }
+    });
+
     // Sort: unread first, then by timestamp descending
     return notifs.sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
-  }, [tasks, projects, notificationPreferences]);
+  }, [tasks, projects, bugs, notificationPreferences]);
 
   // Merge read state into computed notifications
   const computedNotifications: AppNotification[] = useMemo(
@@ -400,40 +516,50 @@ export default function DashboardLayout({
 
   const unreadCount = computedNotifications.filter((n) => !n.read).length;
 
-  // Nav badges only display when real data exists (no hardcoded fake badges)
-  const navItems: SidebarItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    {
-      id: 'projects',
-      label: 'Projects',
-      icon: FolderKanban,
-      badge: projects.length > 0 ? String(projects.length) : undefined,
-    },
-    {
-      id: 'tasks',
-      label: 'Tasks',
-      icon: CheckSquare,
-      badge: tasks.length > 0 ? String(tasks.length) : undefined,
-    },
-    {
-      id: 'team',
-      label: 'Team',
-      icon: Users,
-      badge: teamMembers.length > 0 ? String(teamMembers.length) : undefined,
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      icon: Bell,
-      badge: unreadCount > 0 ? String(unreadCount) : undefined,
-    },
-    {
-      id: 'reports',
-      label: 'Reports',
-      icon: BarChart3,
-    },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+    const awaitingTestingCount = tasks.filter((t) => t.status === 'Under Review').length;
+    const retestBugsCount = bugs.filter((b) => b.status === 'Retesting').length;
+    const testingBadgeCount = awaitingTestingCount + retestBugsCount;
+
+    // Nav badges only display when real data exists (no hardcoded fake badges)
+    const navItems: SidebarItem[] = [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      {
+        id: 'projects',
+        label: 'Projects',
+        icon: FolderKanban,
+        badge: projects.length > 0 ? String(projects.length) : undefined,
+      },
+      {
+        id: 'tasks',
+        label: 'Tasks',
+        icon: CheckSquare,
+        badge: tasks.length > 0 ? String(tasks.length) : undefined,
+      },
+      {
+        id: 'testing',
+        label: 'Testing & QA',
+        icon: BugIcon,
+        badge: testingBadgeCount > 0 ? String(testingBadgeCount) : undefined,
+      },
+      {
+        id: 'team',
+        label: 'Team',
+        icon: Users,
+        badge: teamMembers.length > 0 ? String(teamMembers.length) : undefined,
+      },
+      {
+        id: 'notifications',
+        label: 'Notifications',
+        icon: Bell,
+        badge: unreadCount > 0 ? String(unreadCount) : undefined,
+      },
+      {
+        id: 'reports',
+        label: 'Reports',
+        icon: BarChart3,
+      },
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ];
 
   // Derive display user initials and display name from userProfile state
   const displayName = userProfile.name || userName || (userEmail ? userEmail.split('@')[0] : 'Workspace Member');
@@ -459,12 +585,18 @@ export default function DashboardLayout({
               onBack={() => setSelectedProject(null)}
               onAddTask={onAddTask}
               onUpdateTask={onUpdateTask}
+              bugs={bugs}
+              onAddBug={onAddBug}
+              onUpdateBug={onUpdateBug}
             />
           );
         }
         return (
           <ProjectsPage
-            projects={projects}
+            projects={visibleProjects}
+            teamMembers={teamMembers}
+            currentUserRole={activeRole}
+            currentUserName={displayName}
             onAddProject={onAddProject}
             onSelectProject={handleSelectProject}
           />
@@ -472,13 +604,33 @@ export default function DashboardLayout({
       case 'tasks':
         return (
           <TasksPage
-            tasks={tasks}
-            projects={projects}
+            tasks={visibleTasks}
+            projects={visibleProjects}
             teamMembers={teamMembers}
             currentUserRole={activeRole}
             currentUserName={displayName}
             onAddTask={onAddTask}
             onUpdateTask={onUpdateTask}
+            onSelectProject={handleSelectProject}
+            bugs={bugs}
+            onAddBug={onAddBug}
+            onUpdateBug={onUpdateBug}
+          />
+        );
+      case 'testing':
+        return (
+          <TestingDashboardPage
+            tasks={visibleTasks}
+            projects={visibleProjects}
+            teamMembers={teamMembers}
+            bugs={bugs}
+            currentUserRole={activeRole}
+            currentUserName={displayName}
+            onAddTask={onAddTask}
+            onUpdateTask={onUpdateTask || (() => {})}
+            onAddBug={onAddBug || (() => {})}
+            onUpdateBug={onUpdateBug || (() => {})}
+            onDeleteBug={onDeleteBug}
             onSelectProject={handleSelectProject}
           />
         );
@@ -502,7 +654,7 @@ export default function DashboardLayout({
           />
         );
       case 'reports':
-        return <ReportsPage projects={projects} tasks={tasks} />;
+        return <ReportsPage projects={projects} tasks={tasks} bugs={bugs} />;
       case 'settings':
         return (
           <SettingsPage
@@ -1085,7 +1237,7 @@ export default function DashboardLayout({
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <div className="text-xs">
               <p className="font-medium text-slate-200">System Online</p>
-              <p className="text-[11px] text-slate-400">PM • TL • TM Shared</p>
+              <p className="text-[11px] text-slate-400">PM • TL • TM • QA Shared</p>
             </div>
           </div>
         </div>
@@ -1177,7 +1329,7 @@ export default function DashboardLayout({
                       Switch Role (Workflow Testing)
                     </p>
                     <div className="space-y-1">
-                      {(['Project Manager', 'Team Leader', 'Team Member'] as const).map((r) => (
+                      {(['Project Manager', 'Team Leader', 'Team Member', 'Tester'] as const).map((r) => (
                         <button
                           key={r}
                           type="button"
