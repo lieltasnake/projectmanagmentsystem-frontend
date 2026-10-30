@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, Info, User, Briefcase } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, Info, AlertCircle, KeyRound } from 'lucide-react';
 import type { TeamMember, UserRole } from '../types/pms';
+import { login, dbRoleToDisplayRole, type ApiUser } from '../services/api';
+import FirstLoginPasswordModal from './FirstLoginPasswordModal';
+
 export type { UserRole };
 
 interface LoginPageProps {
@@ -8,253 +11,250 @@ interface LoginPageProps {
   teamMembers?: TeamMember[];
 }
 
-export default function LoginPage({ onLogin, teamMembers = [] }: LoginPageProps = {}) {
-  // State for form inputs
-  const [name, setName] = useState('');
+export default function LoginPage({ onLogin }: LoginPageProps = {}) {
+  // Form input state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('Project Manager');
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // State for frontend demo feedback
-  const [demoMessage, setDemoMessage] = useState<string | null>(null);
+  // First-login password change state
+  const [pendingPasswordChangeUser, setPendingPasswordChangeUser] = useState<ApiUser | null>(null);
+  const [pendingInitialPassword, setPendingInitialPassword] = useState('');
 
-  // Handle selecting an existing member from localStorage if available
-  const handleSelectExistingMember = (member: TeamMember) => {
-    setName(member.name);
-    setEmail(member.email);
-    setRole(member.role);
-    setPassword('••••••••');
+  // Quick preset accounts for convenience
+  const handleSelectPreset = (presetEmail: string, presetPass: string) => {
+    setEmail(presetEmail);
+    setPassword(presetPass);
+    setErrorMessage(null);
   };
 
-  // Handle form submission (frontend-only, stored in browser)
-  const handleSubmit = (e: React.FormEvent) => {
+  // Form submission connecting to real backend API
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-    if (!email.trim() || !password.trim()) {
-      setDemoMessage('Please enter both an email address and a password.');
+    const trimmedEmail = email.trim();
+    const trimmedPass = password.trim();
+
+    if (!trimmedEmail || !trimmedPass) {
+      setErrorMessage('Please enter both an email address and a password.');
       return;
     }
 
-    setDemoMessage(
-      `Signed in as "${email}" with role "${role}". Workspace data is active in browser storage.`
-    );
+    try {
+      setLoading(true);
+      const res = await login(trimmedEmail, trimmedPass);
 
-    if (onLogin) {
-      onLogin(email.trim(), role, name.trim());
+      if (res.mustChangePassword) {
+        // Must change temporary password before dashboard access
+        setPendingInitialPassword(trimmedPass);
+        setPendingPasswordChangeUser(res.user);
+        return;
+      }
+
+      setSuccessMessage(`Welcome back, ${res.user.name}! Accessing workspace...`);
+      const displayRole = dbRoleToDisplayRole(res.user.role);
+
+      setTimeout(() => {
+        if (onLogin) {
+          onLogin(res.user.email, displayRole, res.user.name);
+        }
+      }, 500);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Login failed. Please verify your credentials and try again.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handlePasswordChangeComplete = (updatedUser: ApiUser) => {
+    setPendingPasswordChangeUser(null);
+    setSuccessMessage(`Password updated successfully! Welcome to your dashboard, ${updatedUser.name}.`);
+    const displayRole = dbRoleToDisplayRole(updatedUser.role);
+
+    setTimeout(() => {
+      if (onLogin) {
+        onLogin(updatedUser.email, displayRole, updatedUser.name);
+      }
+    }, 600);
   };
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-[#070b19] overflow-hidden">
-      {/* Background Decorative Ambient Glows (Navy & Purple accents) */}
+      {/* Background Decorative Ambient Glows */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-purple-900/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Main Centered Login Card */}
-      <div className="relative w-full max-w-md bg-[#0f173b]/90 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl p-6 sm:p-8 z-10 transition-all duration-300 hover:border-purple-500/40">
-        
-        {/* System Header & Branding */}
-        <div className="text-center mb-7">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-lg shadow-purple-500/25 mb-4 ring-4 ring-purple-500/10">
-            <ShieldCheck className="w-8 h-8" />
+      {/* Render First-Login Password Change Modal if required */}
+      {pendingPasswordChangeUser ? (
+        <FirstLoginPasswordModal
+          user={pendingPasswordChangeUser}
+          initialPassword={pendingInitialPassword}
+          onSuccess={handlePasswordChangeComplete}
+        />
+      ) : (
+        /* Main Centered Login Card */
+        <div className="relative w-full max-w-md bg-[#0f173b]/90 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl p-6 sm:p-8 z-10 transition-all duration-300 hover:border-purple-500/40">
+          
+          {/* System Header & Branding */}
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-lg shadow-purple-500/25 mb-4 ring-4 ring-purple-500/10">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
+              Project Management System
+            </h1>
+            <div className="mt-1 flex items-center justify-center gap-2">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                Single Sign-On Portal
+              </span>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              Enter your credentials to access your PMS workspace.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            Project Management System
-          </h1>
-          <div className="mt-1 flex items-center justify-center gap-2">
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
-              Frontend Workspace Portal
-            </span>
+
+          {/* Informational role pill (indicating single common login) */}
+          <div className="mb-5 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2">
+            <Info className="w-4 h-4 text-purple-400 shrink-0" />
+            <span>Universal portal for <strong>PM</strong>, <strong>TL</strong>, <strong>TM</strong>, and <strong>Tester</strong></span>
           </div>
-          <p className="mt-3 text-sm text-slate-300">
-            Enter your credentials and select your role to access your local workspace.
-          </p>
-        </div>
 
-        {/* Informational role pill (indicating single common login) */}
-        <div className="mb-6 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex items-center justify-center gap-2">
-          <Info className="w-4 h-4 text-purple-400 shrink-0" />
-          <span>Universal portal for <strong>Project Manager</strong>, <strong>Team Leader</strong>, <strong>Team Member</strong>, and <strong>Tester</strong></span>
-        </div>
-
-        {/* Quick select existing registered members if any exist in localStorage */}
-        {teamMembers.length > 0 && (
+          {/* Quick select verified test accounts */}
           <div className="mb-5 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-            <span className="text-slate-400 block mb-2 font-medium">Or select an existing team member:</span>
+            <span className="text-slate-400 block mb-2 font-medium flex items-center gap-1.5">
+              <KeyRound className="w-3.5 h-3.5 text-purple-400" />
+              Quick fill existing demo accounts:
+            </span>
             <div className="flex flex-wrap gap-1.5">
-              {teamMembers.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => handleSelectExistingMember(m)}
-                  className="px-2.5 py-1 rounded-lg bg-[#141e4b] hover:bg-purple-600/30 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-[11px] flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span className="font-semibold text-purple-300">{m.avatarInitials}</span>
-                  <span>{m.name}</span>
-                  <span className="text-slate-400">({m.role === 'Project Manager' ? 'PM' : m.role === 'Team Leader' ? 'TL' : m.role === 'Tester' ? 'QA' : 'TM'})</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Status Message Banner */}
-        {demoMessage && (
-          <div className="mb-5 p-3.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn">
-            <CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-            <span className="leading-snug">{demoMessage}</span>
-          </div>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Full Name Field (Optional for display) */}
-          <div>
-            <label htmlFor="user-name" className="block text-sm font-medium text-slate-200 mb-1.5">
-              Full Name <span className="text-xs text-slate-400 font-normal">(optional)</span>
-            </label>
-            <div className="relative rounded-xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <User className="h-5 w-5" />
-              </div>
-              <input
-                id="user-name"
-                name="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Your Name"
-                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Email Field */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-slate-200 mb-1.5">
-              Email Address
-            </label>
-            <div className="relative rounded-xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Mail className="h-5 w-5" />
-              </div>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Workspace Role Selector */}
-          <div>
-            <label htmlFor="user-role" className="block text-sm font-medium text-slate-200 mb-1.5">
-              Workspace Role
-            </label>
-            <div className="relative rounded-xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Briefcase className="h-5 w-5" />
-              </div>
-              <select
-                id="user-role"
-                name="role"
-                value={role}
-                onChange={(e) => setRole(e.target.value as UserRole)}
-                className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all cursor-pointer"
-              >
-                <option value="Project Manager">Project Manager (Full Governance & Final Approval)</option>
-                <option value="Team Leader">Team Leader (Task Review & Recommendation)</option>
-                <option value="Team Member">Team Member (Task Execution & Submission)</option>
-                <option value="Tester">Tester (QA, Retesting & Bug Tracking)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Password Field */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-slate-200 mb-1.5">
-              Password
-            </label>
-            <div className="relative rounded-xl shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Lock className="h-5 w-5" />
-              </div>
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-11 pr-11 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
-              />
               <button
                 type="button"
-                id="toggle-password-visibility"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-purple-300 transition-colors focus:outline-none"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => handleSelectPreset('pm@pms.local', 'PmPassword123!')}
+                className="px-2.5 py-1 rounded-lg bg-[#141e4b] hover:bg-purple-600/30 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-[11px] flex items-center gap-1.5 cursor-pointer"
               >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
+                <span className="font-semibold text-purple-300">PM</span>
+                <span>Alex Morgan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPreset('tl@pms.local', 'TlPassword123!')}
+                className="px-2.5 py-1 rounded-lg bg-[#141e4b] hover:bg-purple-600/30 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-[11px] flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="font-semibold text-indigo-300">TL</span>
+                <span>Jordan Lee</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectPreset('tm@pms.local', 'TmPassword123!')}
+                className="px-2.5 py-1 rounded-lg bg-[#141e4b] hover:bg-purple-600/30 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-[11px] flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="font-semibold text-emerald-300">TM</span>
+                <span>Taylor Smith</span>
               </button>
             </div>
           </div>
 
-          {/* Remember Me & Forgot Password Row */}
-          <div className="flex items-center justify-between text-sm pt-1">
-            <label className="flex items-center cursor-pointer select-none">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-700 bg-[#0a0f26] text-purple-600 focus:ring-purple-500 focus:ring-offset-0 focus:ring-offset-transparent transition cursor-pointer"
-              />
-              <span className="ml-2 text-xs sm:text-sm text-slate-300 hover:text-white transition-colors">
-                Remember me
-              </span>
-            </label>
+          {/* Error Banner */}
+          {errorMessage && (
+            <div className="mb-5 p-3.5 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn">
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <span className="leading-snug">{errorMessage}</span>
+            </div>
+          )}
 
-            <span className="text-xs text-slate-400">
-              Local Browser Session
-            </span>
-          </div>
+          {/* Success Message Banner */}
+          {successMessage && (
+            <div className="mb-5 p-3.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs sm:text-sm flex items-start gap-2.5 animate-fadeIn">
+              <CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+              <span className="leading-snug">{successMessage}</span>
+            </div>
+          )}
 
-          {/* Sign In Button */}
-          <button
-            type="submit"
-            id="sign-in-btn"
-            className="w-full mt-2 py-3.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:ring-offset-2 focus:ring-offset-[#0f173b] shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 group cursor-pointer"
-          >
-            <span>Enter PMS Workspace</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
-        </form>
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email Field */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-slate-200 mb-1.5">
+                Email Address
+              </label>
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  className="w-full pl-11 pr-4 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
 
-        {/* Footer Note */}
-        <div className="mt-6 text-center border-t border-slate-800/80 pt-4">
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            Frontend demonstration interface. All projects, tasks, reviews, and team data are saved in browser storage (<code className="text-purple-300">localStorage</code>).
-          </p>
+            {/* Password Field */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-200 mb-1.5">
+                Password
+              </label>
+              <div className="relative rounded-xl shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-11 pr-11 py-2.5 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+                />
+                <button
+                  type="button"
+                  id="toggle-password-visibility"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-purple-300 transition-colors focus:outline-none cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Governance Notice */}
+            <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2 rounded-lg border border-slate-800/80">
+              <span>Account registration is governed by the Project Manager. If you do not have an account, please contact your manager.</span>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <span>Authenticating...</span>
+              ) : (
+                <>
+                  <span>Sign In</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
         </div>
-
-      </div>
+      )}
     </div>
   );
 }

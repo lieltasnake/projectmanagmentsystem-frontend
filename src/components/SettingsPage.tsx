@@ -15,7 +15,11 @@ import {
   RotateCcw,
   Clock,
   Send,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
+import { updateMyProfile, changeMyPassword } from '../services/api';
 import type {
   UserProfile,
   UserRole,
@@ -56,6 +60,17 @@ export default function SettingsPage({
   const [department, setDepartment] = useState(userProfile.department || 'Engineering & Delivery');
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Local form state for Change Password
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [passSuccessMsg, setPassSuccessMsg] = useState('');
+  const [passErrorMsg, setPassErrorMsg] = useState('');
+  const [isSavingPass, setIsSavingPass] = useState(false);
 
   // Keep local form inputs synchronized if userProfile updates in shared state
   useEffect(() => {
@@ -65,7 +80,7 @@ export default function SettingsPage({
   }, [userProfile.name, userProfile.email, userProfile.department]);
 
   // Handle Profile Save
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileErrorMsg('');
     setProfileSuccessMsg('');
@@ -80,15 +95,65 @@ export default function SettingsPage({
       return;
     }
 
-    onUpdateProfile({
-      name: fullName.trim(),
-      email: email.trim(),
-      role: userProfile.role, // Role cannot be modified by user
-      department: department.trim(),
-    });
+    try {
+      setIsSavingProfile(true);
+      await updateMyProfile({ name: fullName.trim(), email: email.trim() });
 
-    setProfileSuccessMsg('Personal profile updated successfully.');
-    setTimeout(() => setProfileSuccessMsg(''), 4000);
+      onUpdateProfile({
+        name: fullName.trim(),
+        email: email.trim(),
+        role: userProfile.role, // Role cannot be modified by user
+        department: department.trim(),
+      });
+
+      setProfileSuccessMsg('Personal profile and email updated successfully.');
+      setTimeout(() => setProfileSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setProfileErrorMsg(err.message || 'Failed to update personal profile.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Handle Change Password Save
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassErrorMsg('');
+    setPassSuccessMsg('');
+
+    if (!currentPassword.trim()) {
+      setPassErrorMsg('Please enter your current password.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPassErrorMsg('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPassErrorMsg('New passwords do not match. Please verify and retype.');
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setPassErrorMsg('New password must be different from your current password.');
+      return;
+    }
+
+    try {
+      setIsSavingPass(true);
+      await changeMyPassword(currentPassword, newPassword);
+      setPassSuccessMsg('Your password has been changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPassSuccessMsg(''), 5000);
+    } catch (err: any) {
+      setPassErrorMsg(err.message || 'Failed to update password.');
+    } finally {
+      setIsSavingPass(false);
+    }
   };
 
   // Handle Profile Reset
@@ -324,24 +389,30 @@ export default function SettingsPage({
                   />
                 </div>
 
-                {/* Department */}
+                {/* Department / Team Assignment (Governance Locked) */}
                 <div>
-                  <label htmlFor="department" className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Department
-                  </label>
-                  <select
-                    id="department"
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
-                  >
-                    <option value="Engineering & Delivery">Engineering & Delivery</option>
-                    <option value="Product Management">Product Management</option>
-                    <option value="UI/UX & Product Design">UI/UX & Product Design</option>
-                    <option value="Quality Assurance & Testing">Quality Assurance & Testing</option>
-                    <option value="DevOps & Infrastructure">DevOps & Infrastructure</option>
-                    <option value="Operations & Strategy">Operations & Strategy</option>
-                  </select>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <span>Team / Department Assignment</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-amber-500/20 font-normal">
+                        Controlled by Project Manager
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Governance Locked</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      disabled
+                      readOnly
+                      value={department}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-sm text-slate-300 cursor-not-allowed select-none font-semibold pl-10"
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  </div>
                 </div>
 
                 {/* Role (Strictly Read-Only / Non-Editable) */}
@@ -387,14 +458,117 @@ export default function SettingsPage({
 
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2 cursor-pointer"
+                    disabled={isSavingProfile}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     <Check className="w-4 h-4" />
-                    <span>Save Profile Changes</span>
+                    <span>{isSavingProfile ? 'Saving...' : 'Save Profile Changes'}</span>
                   </button>
                 </div>
               </form>
             </div>
+          </div>
+
+          {/* Change Password Card */}
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="pb-4 border-b border-slate-800/80 mb-5">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-purple-400" />
+                <span>Change Password</span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                Update your account password. For security, your current password is required.
+              </p>
+            </div>
+
+            {passSuccessMsg && (
+              <div className="mb-4 p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                <span>{passSuccessMsg}</span>
+              </div>
+            )}
+
+            {passErrorMsg && (
+              <div className="mb-4 p-4 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-sm flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+                <span>{passErrorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-xl">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Current Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  New Password * (minimum 6 characters)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingPass}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{isSavingPass ? 'Updating Password...' : 'Update Password'}</span>
+                </button>
+              </div>
+            </form>
           </div>
 
           {/* Role Governance Scope Explanation */}

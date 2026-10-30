@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import LoginPage from './components/LoginPage';
 import DashboardLayout from './components/DashboardLayout';
+import { getAuthToken, removeAuthToken, getMe, dbRoleToDisplayRole } from './services/api';
 import type {
   Project,
   Task,
@@ -32,8 +33,32 @@ function setStoredItem<T>(key: string, value: T): void {
 }
 
 export default function App() {
-  // Session Authentication State (in-memory)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  // Session Authentication State verified via JWT
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getAuthToken());
+
+  // Check and restore active user session on mount
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      getMe()
+        .then((res) => {
+          setIsAuthenticated(true);
+          setUserProfile((prev) => ({
+            ...prev,
+            name: res.user.name,
+            email: res.user.email,
+            role: dbRoleToDisplayRole(res.user.role),
+            department: res.user.team || prev.department,
+          }));
+        })
+        .catch(() => {
+          removeAuthToken();
+          setIsAuthenticated(false);
+        });
+    } else {
+      setIsAuthenticated(false);
+    }
+  }, []);
 
   // Core Data State (persisted locally in browser localStorage, starts empty if no user records exist)
   const [projects, setProjects] = useState<Project[]>(() =>
@@ -314,7 +339,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    // Sign out to LoginPage without destroying workspace state
+    // Clear JWT authentication session
+    removeAuthToken();
     setIsAuthenticated(false);
   };
 

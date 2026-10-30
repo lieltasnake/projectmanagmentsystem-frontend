@@ -543,7 +543,7 @@ export default function DashboardLayout({
       },
       {
         id: 'team',
-        label: 'Team',
+        label: activeRole === 'Project Manager' ? 'User Management' : 'Team',
         icon: Users,
         badge: teamMembers.length > 0 ? String(teamMembers.length) : undefined,
       },
@@ -637,6 +637,8 @@ export default function DashboardLayout({
       case 'team':
         return (
           <TeamPage
+            currentUserRole={activeRole}
+            currentUserEmail={displayEmail}
             members={teamMembers}
             tasks={tasks}
             onAddMember={onAddMember}
@@ -1323,41 +1325,13 @@ export default function DashboardLayout({
                     </div>
                   </div>
 
-                  {/* Role Switcher for Frontend Workflow Testing */}
-                  <div className="px-3 py-2 border-b border-slate-800">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Switch Role (Workflow Testing)
-                    </p>
-                    <div className="space-y-1">
-                      {(['Project Manager', 'Team Leader', 'Team Member', 'Tester'] as const).map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => {
-                            setActiveRole(r);
-                            setUserProfile({ ...userProfile, role: r });
-                            setIsProfileMenuOpen(false);
-                          }}
-                          className={`w-full text-left px-2 py-1 rounded text-xs transition-colors flex items-center justify-between cursor-pointer ${
-                            activeRole === r
-                              ? 'bg-purple-600 text-white font-semibold'
-                              : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <span>{r}</span>
-                          {activeRole === r && <CheckCircle className="w-3 h-3" />}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <button
                     type="button"
                     onClick={() => {
                       setIsProfileMenuOpen(false);
                       setActiveItem('settings');
                     }}
-                    className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 cursor-pointer"
                   >
                     <User className="w-4 h-4 text-purple-400" />
                     <span>My Profile</span>
