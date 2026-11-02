@@ -1,4 +1,4 @@
-import type { UserRole } from '../types/pms';
+import type { Project, UserRole } from '../types/pms';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api';
 const TOKEN_KEY = 'pms_auth_token';
@@ -9,6 +9,7 @@ export interface ApiUser {
   email: string;
   role: 'PM' | 'TL' | 'TM' | 'TESTER' | string;
   team: string;
+  skills?: string[];
   isActive: boolean;
   mustChangePassword: boolean;
   createdAt?: string;
@@ -178,6 +179,7 @@ export async function createUser(userData: {
   password: string;
   role: string;
   team?: string;
+  skills?: string[];
 }): Promise<{ success: boolean; message: string; user: ApiUser }> {
   return request<{ success: boolean; message: string; user: ApiUser }>('/users', {
     method: 'POST',
@@ -192,6 +194,7 @@ export async function updateUser(
     email?: string;
     role?: string;
     team?: string;
+    skills?: string[];
   }
 ): Promise<{ success: boolean; message: string; user: ApiUser }> {
   return request<{ success: boolean; message: string; user: ApiUser }>(`/users/${id}`, {
@@ -231,6 +234,241 @@ export async function resetUserPassword(
 }
 
 // =========================================================================
+// Project Endpoints
+// =========================================================================
+
+export interface ProjectFilters {
+  search?: string;
+  status?: string;
+  teamLeader?: string;
+}
+
+export interface CreateProjectData {
+  name: string;
+  description?: string;
+  startDate?: string;
+  deadline?: string;
+  status?: string;
+  priority?: string;
+  teamLeaderId?: string;
+  teamMemberIds?: string[];
+}
+
+export interface UpdateProjectData {
+  name?: string;
+  description?: string;
+  startDate?: string;
+  deadline?: string;
+  status?: string;
+  priority?: string;
+  teamLeaderId?: string;
+  teamMemberIds?: string[];
+}
+
+export interface ProjectTeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  isActive: boolean;
+  isTeamLeader: boolean;
+  assignedAt?: string;
+}
+
+export interface ProjectTeamResponse {
+  success: boolean;
+  count: number;
+  teamMembers: ProjectTeamMember[];
+}
+
+export async function getProjects(filters?: ProjectFilters): Promise<{
+  success: boolean;
+  count: number;
+  projects: Project[];
+}> {
+  const query = new URLSearchParams();
+  if (filters?.search) query.append('search', filters.search);
+  if (filters?.status && filters.status !== 'All') query.append('status', filters.status);
+  if (filters?.teamLeader) query.append('teamLeader', filters.teamLeader);
+
+  const qs = query.toString();
+  return request<{ success: boolean; count: number; projects: Project[] }>(
+    `/projects${qs ? `?${qs}` : ''}`,
+    {
+      method: 'GET',
+    }
+  );
+}
+
+export async function createProject(data: CreateProjectData): Promise<{
+  success: boolean;
+  message: string;
+  project: Project;
+}> {
+  return request<{ success: boolean; message: string; project: Project }>('/projects', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getProject(id: string | number): Promise<{
+  success: boolean;
+  project: Project;
+}> {
+  return request<{ success: boolean; project: Project }>(`/projects/${id}`, {
+    method: 'GET',
+  });
+}
+
+export async function updateProject(
+  id: string | number,
+  data: UpdateProjectData
+): Promise<{
+  success: boolean;
+  message: string;
+  project: Project;
+}> {
+  return request<{ success: boolean; message: string; project: Project }>(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteProject(id: string | number): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return request<{ success: boolean; message: string }>(`/projects/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getProjectTasks(projectId: string | number): Promise<{
+  success: boolean;
+  count: number;
+  tasks: {
+    id: string;
+    projectId: string;
+    title: string;
+    description: string;
+    status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+    priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+    assignedToId: string | null;
+    deadline: string | null;
+    createdAt?: string;
+  }[];
+}> {
+  return request<{
+    success: boolean;
+    count: number;
+    tasks: {
+      id: string;
+      projectId: string;
+      title: string;
+      description: string;
+      status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+      priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+      assignedToId: string | null;
+      deadline: string | null;
+      createdAt?: string;
+    }[];
+  }>(`/projects/${projectId}/tasks`, {
+    method: 'GET',
+  });
+}
+
+export async function createProjectTask(
+  projectId: string | number,
+  taskData: {
+    title: string;
+    description?: string;
+    assignedToId?: string | number | null;
+    priority?: 'High' | 'Medium' | 'Low' | 'Urgent';
+    deadline?: string;
+  }
+): Promise<{
+  success: boolean;
+  message: string;
+  task: {
+    id: string;
+    projectId: string;
+    title: string;
+    description: string;
+    status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+    priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+    assignedToId: string | null;
+    deadline: string | null;
+    createdAt?: string;
+  };
+}> {
+  const priorityMap: Record<string, string> = {
+    High: 'HIGH',
+    Medium: 'MEDIUM',
+    Low: 'LOW',
+    Urgent: 'URGENT',
+  };
+  const backendPriority = taskData.priority ? priorityMap[taskData.priority] || taskData.priority : undefined;
+
+  return request<{
+    success: boolean;
+    message: string;
+    task: {
+      id: string;
+      projectId: string;
+      title: string;
+      description: string;
+      status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+      priority: 'High' | 'Medium' | 'Low' | 'Urgent';
+      assignedToId: string | null;
+      deadline: string | null;
+      createdAt?: string;
+    };
+  }>(`/projects/${projectId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify({
+      title: taskData.title,
+      description: taskData.description,
+      assignedToId: taskData.assignedToId || undefined,
+      priority: backendPriority,
+      deadline: taskData.deadline || undefined,
+    }),
+  });
+}
+
+export async function getProjectTeam(id: string | number): Promise<ProjectTeamResponse> {
+  return request<ProjectTeamResponse>(`/projects/${id}/team`, {
+    method: 'GET',
+  });
+}
+
+export async function addProjectTeamMember(
+  id: string | number,
+  userIds: string[],
+  teamLeaderId?: string
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return request<{ success: boolean; message: string }>(`/projects/${id}/team`, {
+    method: 'POST',
+    body: JSON.stringify({ userIds, teamLeaderId }),
+  });
+}
+
+export async function removeProjectTeamMember(
+  id: string | number,
+  userId: string | number
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return request<{ success: boolean; message: string }>(`/projects/${id}/team/${userId}`, {
+    method: 'DELETE',
+  });
+}
+
+// =========================================================================
 // Role Helper Utilities
 // =========================================================================
 
@@ -262,5 +500,164 @@ export function displayRoleToDbRole(role: UserRole | string): string {
     default:
       return (role || 'TM').toUpperCase();
   }
+}
+
+// =========================================================================
+// Task Workflow Endpoints
+// =========================================================================
+
+export async function getTask(id: string | number): Promise<{ success: boolean; task: any }> {
+  return request<{ success: boolean; task: any }>(`/tasks/${id}`, { method: 'GET' });
+}
+
+export async function updateTask(
+  id: string | number,
+  data: { title?: string; description?: string; priority?: string; deadline?: string | null }
+): Promise<{ success: boolean; message: string; task: any }> {
+  return request(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function startTask(id: string | number): Promise<{ success: boolean; message: string; status: string }> {
+  return request<{ success: boolean; message: string; status: string }>(`/tasks/${id}/start`, { method: 'PATCH' });
+}
+
+export async function putTaskOnHold(id: string | number, reason: string): Promise<{ success: boolean; message: string; status: string }> {
+  return request(`/tasks/${id}/on-hold`, { method: 'PATCH', body: JSON.stringify({ reason }) });
+}
+
+export async function resumeTask(id: string | number): Promise<{ success: boolean; message: string; status: string }> {
+  return request(`/tasks/${id}/resume`, { method: 'PATCH' });
+}
+
+export async function submitTask(
+  id: string | number,
+  data: { demoUrl?: string; description?: string }
+): Promise<{ success: boolean; message: string; submission: { id: string; version: number }; status: string }> {
+  return request(`/tasks/${id}/submit`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function uploadDemoZip(
+  id: string | number,
+  file: File
+): Promise<{ success: boolean; message: string; submission: { id: string; version: number }; demoUrl: string; status: string }> {
+  const token = getAuthToken();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE_URL}/tasks/${id}/demo/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || data?.message || 'ZIP upload failed');
+  return data;
+}
+
+export async function resubmitTask(
+  id: string | number,
+  data: { demoUrl?: string; description?: string }
+): Promise<{ success: boolean; message: string; submission: { id: string; version: number }; status: string }> {
+  return request(`/tasks/${id}/resubmit`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function requestTaskCorrections(
+  id: string | number,
+  feedback: string
+): Promise<{ success: boolean; message: string; status: string }> {
+  return request(`/tasks/${id}/request-corrections`, { method: 'PATCH', body: JSON.stringify({ feedback }) });
+}
+
+export async function recommendTaskApproval(
+  id: string | number,
+  comment?: string
+): Promise<{ success: boolean; message: string; status: string }> {
+  return request(`/tasks/${id}/recommend`, { method: 'PATCH', body: JSON.stringify({ comment }) });
+}
+
+export async function approveTask(
+  id: string | number,
+  feedback?: string
+): Promise<{ success: boolean; message: string; status: string }> {
+  return request(`/tasks/${id}/approve`, { method: 'PATCH', body: JSON.stringify({ feedback }) });
+}
+
+export async function getTaskSubmissions(id: string | number): Promise<{ success: boolean; count: number; submissions: any[] }> {
+  return request(`/tasks/${id}/submissions`, { method: 'GET' });
+}
+
+export async function getTaskBugs(id: string | number): Promise<{ success: boolean; count: number; bugs: any[] }> {
+  return request(`/tasks/${id}/bugs`, { method: 'GET' });
+}
+
+export async function reportBug(
+  id: string | number,
+  data: { title: string; description: string; severity?: string; reproductionSteps?: string }
+): Promise<{ success: boolean; message: string; bug: { id: string; title: string; status: string; createdAt: string }; taskStatus: string }> {
+  return request(`/tasks/${id}/report-bug`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function verifyBug(
+  id: string | number,
+  data: { bugId: string | number; verified: boolean; verificationNotes?: string }
+): Promise<{ success: boolean; message: string; bugStatus: string; taskStatus: string }> {
+  return request(`/tasks/${id}/verify-bug`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function requestFinalCorrections(
+  id: string | number,
+  feedback: string
+): Promise<{ success: boolean; message: string; taskStatus: string }> {
+  return request(`/tasks/${id}/request-final-corrections`, { method: 'PATCH', body: JSON.stringify({ feedback }) });
+}
+
+export async function getNotifications(unreadOnly?: boolean): Promise<{ success: boolean; count: number; notifications: any[] }> {
+  const query = unreadOnly ? '?unreadOnly=true' : '';
+  return request(`/tasks/notifications${query}`, { method: 'GET' });
+}
+
+export async function markNotificationRead(notificationId: string | number): Promise<{ success: boolean; message: string }> {
+  return request(`/tasks/notifications/${notificationId}/read`, { method: 'PATCH' });
+}
+
+export async function createSubtask(taskId: string | number, title: string): Promise<{ success: boolean; subtask: any }> {
+  return request(`/tasks/${taskId}/subtasks`, { method: 'POST', body: JSON.stringify({ title }) });
+}
+
+export async function updateSubtask(
+  taskId: string | number,
+  subtaskId: string | number,
+  data: { title?: string; completed?: boolean }
+): Promise<{ success: boolean; message: string }> {
+  return request(`/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export async function deleteSubtask(taskId: string | number, subtaskId: string | number): Promise<{ success: boolean; message: string }> {
+  return request(`/tasks/${taskId}/subtasks/${subtaskId}`, { method: 'DELETE' });
+}
+
+export async function addTaskComment(taskId: string | number, content: string): Promise<{ success: boolean; comment: any }> {
+  return request(`/tasks/${taskId}/comments`, { method: 'POST', body: JSON.stringify({ content }) });
+}
+
+export async function uploadTaskAttachment(taskId: string | number, file: File): Promise<{ success: boolean; attachment: any }> {
+  const token = getAuthToken();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || data?.message || 'Upload failed');
+  return data;
+}
+
+export async function deleteTaskAttachment(taskId: string | number, attachmentId: string | number): Promise<{ success: boolean; message: string }> {
+  return request(`/tasks/${taskId}/attachments/${attachmentId}`, { method: 'DELETE' });
+}
+
+export function getTaskAttachmentDownloadUrl(taskId: string | number, attachmentId: string | number): string {
+  return `${API_BASE_URL}/tasks/${taskId}/attachments/${attachmentId}/download`;
 }
 

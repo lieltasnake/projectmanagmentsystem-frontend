@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import ProjectsPage from './ProjectsPage';
-import ProjectDetailsPage from './ProjectDetailsPage';
 import TasksPage from './TasksPage';
+import ProjectDetailsPage from './ProjectDetailsPage';
 import TeamPage from './TeamPage';
 import NotificationsPage from './NotificationsPage';
 import ReportsPage from './ReportsPage';
@@ -74,6 +74,8 @@ interface DashboardLayoutProps {
   onLogout?: () => void;
   onAddProject?: (project: Project) => void;
   onUpdateProject?: (project: Project) => void;
+  onEditProject?: (project: Project) => void;
+  onDeleteProject?: (projectId: string) => void;
   onAddTask?: (task: Task) => void;
   onUpdateTask?: (task: Task) => void;
   onAddMember?: (member: TeamMember) => void;
@@ -100,9 +102,12 @@ export default function DashboardLayout({
   appearanceSettings: propAppearanceSettings,
   onUpdateAppearance: propOnUpdateAppearance,
   bugs = [],
+  notifications: propNotifications = [],
   onLogout,
   onAddProject,
   onUpdateProject: _onUpdateProject,
+  onEditProject,
+  onDeleteProject,
   onAddTask,
   onUpdateTask,
   onAddMember,
@@ -116,7 +121,7 @@ export default function DashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeRole, setActiveRole] = useState<UserRole>(() => {
+  const [activeRole] = useState<UserRole>(() => {
     if (userRole === 'Team Leader' || userRole === 'Team Member' || userRole === 'Tester') {
       return userRole;
     }
@@ -163,28 +168,11 @@ export default function DashboardLayout({
     setActiveItem('projects');
   };
 
-  // ── Role-based project visibility ──
-  // PM sees all projects; TL sees projects where they are the assigned TL;
-  // TM sees projects where they are in the assigned team member list.
-  const currentMember = useMemo(
-    () => teamMembers.find(
-      (m) => m.email.toLowerCase() === (userProfile.email || '').toLowerCase()
-            || m.name.toLowerCase() === (userProfile.name || '').toLowerCase()
-    ),
-    [teamMembers, userProfile.email, userProfile.name]
-  );
-
+  // Role-based project visibility is enforced by the backend.
+  // Frontend simply renders the projects returned for the authenticated user.
   const visibleProjects = useMemo(() => {
-    if (activeRole === 'Project Manager' || activeRole === 'Tester') return projects;
-    if (!currentMember) return [];
-    return projects.filter((p) => {
-      if (activeRole === 'Team Leader') {
-        return p.teamLeaderId === currentMember.id;
-      }
-      // Team Member
-      return p.teamMemberIds?.includes(currentMember.id) ?? false;
-    });
-  }, [projects, activeRole, currentMember]);
+    return projects;
+  }, [projects]);
 
   const visibleProjectIds = useMemo(
     () => new Set(visibleProjects.map((p) => p.id)),
@@ -508,10 +496,22 @@ export default function DashboardLayout({
     return notifs.sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1));
   }, [tasks, projects, bugs, notificationPreferences]);
 
+  // Merge backend notifications with derived notifications
+  const allNotifications: AppNotification[] = useMemo(() => {
+    const backendSet = new Set(propNotifications.map((n) => String(n.id)));
+    const merged = [...derivedNotifications];
+    propNotifications.forEach((n) => {
+      if (!backendSet.has(String(n.id)) || !derivedNotifications.some((d) => String(d.id) === String(n.id))) {
+        merged.push({ ...n, read: readNotifIds.has(String(n.id)) });
+      }
+    });
+    return merged;
+  }, [derivedNotifications, propNotifications, readNotifIds]);
+
   // Merge read state into computed notifications
   const computedNotifications: AppNotification[] = useMemo(
-    () => derivedNotifications.map((n) => ({ ...n, read: readNotifIds.has(n.id) })),
-    [derivedNotifications, readNotifIds]
+    () => allNotifications.map((n) => ({ ...n, read: readNotifIds.has(n.id) })),
+    [allNotifications, readNotifIds]
   );
 
   const unreadCount = computedNotifications.filter((n) => !n.read).length;
@@ -537,7 +537,7 @@ export default function DashboardLayout({
       },
       {
         id: 'testing',
-        label: 'Testing & QA',
+        label: activeRole === 'Team Member' ? 'Bug Reports' : 'Testing & QA',
         icon: BugIcon,
         badge: testingBadgeCount > 0 ? String(testingBadgeCount) : undefined,
       },
@@ -588,6 +588,12 @@ export default function DashboardLayout({
               bugs={bugs}
               onAddBug={onAddBug}
               onUpdateBug={onUpdateBug}
+              onProjectUpdated={(updated) => {
+                if (_onUpdateProject) {
+                  _onUpdateProject(updated);
+                }
+                setSelectedProject((prev) => (prev && prev.id === updated.id ? updated : prev));
+              }}
             />
           );
         }
@@ -598,23 +604,26 @@ export default function DashboardLayout({
             currentUserRole={activeRole}
             currentUserName={displayName}
             onAddProject={onAddProject}
+            onEditProject={onEditProject || _onUpdateProject}
+            onDeleteProject={onDeleteProject}
             onSelectProject={handleSelectProject}
           />
         );
+        break;
       case 'tasks':
         return (
           <TasksPage
             tasks={visibleTasks}
-            projects={visibleProjects}
+            projects={projects}
             teamMembers={teamMembers}
             currentUserRole={activeRole}
             currentUserName={displayName}
-            onAddTask={onAddTask}
-            onUpdateTask={onUpdateTask}
-            onSelectProject={handleSelectProject}
             bugs={bugs}
-            onAddBug={onAddBug}
-            onUpdateBug={onUpdateBug}
+            onAddTask={onAddTask}
+            onUpdateTask={onUpdateTask || (() => {})}
+            onSelectProject={handleSelectProject}
+            onAddBug={onAddBug || (() => {})}
+            onUpdateBug={onUpdateBug || (() => {})}
           />
         );
       case 'testing':

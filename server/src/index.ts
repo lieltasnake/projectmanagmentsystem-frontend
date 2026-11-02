@@ -1,9 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { checkDbConnection, runSafeMigrations } from './db';
 import authRouter from './routes/auth';
 import usersRouter from './routes/users';
+import projectsRouter from './routes/projects';
+import tasksRouter from './routes/tasks';
 
 dotenv.config();
 
@@ -39,6 +42,16 @@ app.use('/api/auth', authRouter);
 
 // User Management routes
 app.use('/api/users', usersRouter);
+
+// Project routes
+app.use('/api/projects', projectsRouter);
+
+// Task routes
+app.use('/api/tasks', tasksRouter);
+
+// Static file serving for extracted ZIP demo previews
+const DEMO_UPLOAD_DIR = path.join(__dirname, 'uploads', 'demos');
+app.use('/api/uploads/demos', express.static(DEMO_UPLOAD_DIR));
 
 // 404 handler for undefined routes
 app.use((_req: Request, res: Response) => {

@@ -81,6 +81,7 @@ export default function TeamPage({
     email: '',
     role: 'TM' as 'TL' | 'TM' | 'TESTER' | 'PM',
     team: 'Frontend Dev',
+    skills: '',
     temporaryPassword: '',
   });
   const [createError, setCreateError] = useState<string | null>(null);
@@ -92,6 +93,7 @@ export default function TeamPage({
     email: '',
     role: 'TM',
     team: '',
+    skills: '',
   });
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -230,6 +232,7 @@ export default function TeamPage({
       email: '',
       role: 'TM',
       team: 'Frontend Dev',
+      skills: '',
       temporaryPassword: autoPass,
     });
     setCreateError(null);
@@ -258,6 +261,10 @@ export default function TeamPage({
         password: createFormData.temporaryPassword.trim(),
         role: createFormData.role,
         team: createFormData.team.trim() || 'General',
+        skills: createFormData.skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
 
       setApiSuccess(`User account "${res.user.name}" created successfully! Temporary password: ${createFormData.temporaryPassword}`);
@@ -274,6 +281,7 @@ export default function TeamPage({
           email: res.user.email,
           role: dbRoleToDisplayRole(res.user.role),
           department: res.user.team,
+          skills: res.user.skills || [],
           avatarInitials: res.user.name
             .split(/[\s._-]+/)
             .slice(0, 2)
@@ -298,6 +306,7 @@ export default function TeamPage({
       email: user.email,
       role: user.role,
       team: user.team || 'General',
+      skills: (user.skills || []).join(', '),
     });
     setEditError(null);
   };
@@ -314,6 +323,10 @@ export default function TeamPage({
         email: editFormData.email.trim(),
         role: editFormData.role,
         team: editFormData.team.trim(),
+        skills: editFormData.skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
 
       setApiSuccess(`Account for "${res.user.name}" updated successfully.`);
@@ -328,6 +341,7 @@ export default function TeamPage({
           email: res.user.email,
           role: dbRoleToDisplayRole(res.user.role),
           department: res.user.team,
+          skills: res.user.skills || [],
           avatarInitials: res.user.name
             .split(/[\s._-]+/)
             .slice(0, 2)
@@ -856,8 +870,24 @@ export default function TeamPage({
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                   />
                 </div>
-              </div>
 
+                {/* Skills */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Skills (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={createFormData.skills}
+                    onChange={(e) => setCreateFormData({ ...createFormData, skills: e.target.value })}
+                    placeholder="e.g. React, TypeScript, Node.js, PostgreSQL"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Comma-separated list of skills used for team-member skill-based selection.
+                  </p>
+                </div>
+              </div>
               {/* Temporary Password */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -988,6 +1018,21 @@ export default function TeamPage({
                     onChange={(e) => setEditFormData({ ...editFormData, team: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
                   />
+                </div>
+
+                {/* Skills */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">Skills (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={editFormData.skills}
+                    onChange={(e) => setEditFormData({ ...editFormData, skills: e.target.value })}
+                    placeholder="e.g. React, TypeScript, Node.js, PostgreSQL"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Comma-separated list of skills used for team-member skill-based selection.
+                  </p>
                 </div>
               </div>
 

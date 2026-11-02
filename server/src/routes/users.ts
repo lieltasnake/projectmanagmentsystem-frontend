@@ -22,7 +22,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
     }
 
     const result = await pool.query(
-      `SELECT id, name, email, role, team, is_active, must_change_password, created_at, updated_at
+      `SELECT id, name, email, role, team, skills, is_active, must_change_password, created_at, updated_at
        FROM users
        WHERE id = $1`,
       [userId]
@@ -41,6 +41,7 @@ router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Resp
         email: u.email,
         role: u.role,
         team: u.team || 'General',
+        skills: u.skills ? String(u.skills).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
         isActive: Boolean(u.is_active),
         mustChangePassword: Boolean(u.must_change_password),
         createdAt: u.created_at,
@@ -243,7 +244,7 @@ router.get('/', authenticateToken, requirePM, async (req: Request, res: Response
     const { search, role, team, status } = req.query;
 
     let query = `
-      SELECT id, name, email, role, team, is_active, must_change_password, created_at, updated_at
+      SELECT id, name, email, role, team, skills, is_active, must_change_password, created_at, updated_at
       FROM users
       WHERE 1=1
     `;
@@ -282,6 +283,7 @@ router.get('/', authenticateToken, requirePM, async (req: Request, res: Response
       email: u.email,
       role: u.role,
       team: u.team || 'General',
+      skills: u.skills ? String(u.skills).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
       isActive: Boolean(u.is_active),
       mustChangePassword: Boolean(u.must_change_password),
       createdAt: u.created_at,
@@ -305,7 +307,7 @@ router.get('/', authenticateToken, requirePM, async (req: Request, res: Response
  */
 router.post('/', authenticateToken, requirePM, async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role, team } = req.body;
+    const { name, email, password, role, team, skills } = req.body;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({
@@ -319,6 +321,11 @@ router.post('/', authenticateToken, requirePM, async (req: Request, res: Respons
     const rawPassword = String(password).trim();
     const normalizedRole = String(role).trim().toUpperCase();
     const userTeam = team && String(team).trim() ? String(team).trim() : 'General';
+    const userSkills = Array.isArray(skills)
+      ? skills.map(String).filter(Boolean).join(',')
+      : skills && String(skills).trim()
+      ? String(skills).trim()
+      : null;
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -360,10 +367,10 @@ router.post('/', authenticateToken, requirePM, async (req: Request, res: Respons
 
     // Insert user with must_change_password = TRUE
     const insertRes = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, team, is_active, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, TRUE, TRUE)
-       RETURNING id, name, email, role, team, is_active, must_change_password, created_at, updated_at`,
-      [trimmedName, trimmedEmail, passwordHash, normalizedRole, userTeam]
+      `INSERT INTO users (name, email, password_hash, role, team, skills, is_active, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, TRUE)
+       RETURNING id, name, email, role, team, skills, is_active, must_change_password, created_at, updated_at`,
+      [trimmedName, trimmedEmail, passwordHash, normalizedRole, userTeam, userSkills]
     );
 
     const newUser = insertRes.rows[0];
@@ -377,6 +384,7 @@ router.post('/', authenticateToken, requirePM, async (req: Request, res: Respons
         email: newUser.email,
         role: newUser.role,
         team: newUser.team,
+        skills: newUser.skills ? String(newUser.skills).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
         isActive: Boolean(newUser.is_active),
         mustChangePassword: Boolean(newUser.must_change_password),
         createdAt: newUser.created_at,
@@ -400,7 +408,7 @@ router.patch('/:id', authenticateToken, requirePM, async (req: Request, res: Res
       return res.status(400).json({ success: false, error: 'Invalid user ID.' });
     }
 
-    const { name, email, role, team } = req.body;
+    const { name, email, role, team, skills } = req.body;
 
     // Check if user exists
     const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetId]);
@@ -411,6 +419,11 @@ router.patch('/:id', authenticateToken, requirePM, async (req: Request, res: Res
     const currentUser = userRes.rows[0];
     const updatedName = name && String(name).trim() ? String(name).trim() : currentUser.name;
     const updatedTeam = team !== undefined ? String(team).trim() : currentUser.team;
+    const updatedSkills = Array.isArray(skills)
+      ? skills.map(String).filter(Boolean).join(',')
+      : skills !== undefined
+      ? String(skills).trim()
+      : currentUser.skills || null;
 
     let updatedEmail = currentUser.email;
     if (email && String(email).trim()) {
@@ -450,10 +463,10 @@ router.patch('/:id', authenticateToken, requirePM, async (req: Request, res: Res
 
     const updateRes = await pool.query(
       `UPDATE users
-       SET name = $1, email = $2, role = $3, team = $4, updated_at = CURRENT_TIMESTAMP
+       SET name = $1, email = $2, role = $3, team = $4, skills = $6, updated_at = CURRENT_TIMESTAMP
        WHERE id = $5
-       RETURNING id, name, email, role, team, is_active, must_change_password, created_at, updated_at`,
-      [updatedName, updatedEmail, updatedRole, updatedTeam, targetId]
+       RETURNING id, name, email, role, team, skills, is_active, must_change_password, created_at, updated_at`,
+      [updatedName, updatedEmail, updatedRole, updatedTeam, targetId, updatedSkills]
     );
 
     const u = updateRes.rows[0];
@@ -465,7 +478,8 @@ router.patch('/:id', authenticateToken, requirePM, async (req: Request, res: Res
         name: u.name,
         email: u.email,
         role: u.role,
-        team: u.team || 'General',
+        team: u.team,
+        skills: u.skills ? String(u.skills).split(',').map((s: string) => s.trim()).filter(Boolean) : [],
         isActive: Boolean(u.is_active),
         mustChangePassword: Boolean(u.must_change_password),
         createdAt: u.created_at,

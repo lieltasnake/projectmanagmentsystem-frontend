@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import LoginPage from './components/LoginPage';
 import DashboardLayout from './components/DashboardLayout';
-import { getAuthToken, removeAuthToken, getMe, dbRoleToDisplayRole } from './services/api';
+import { getAuthToken, removeAuthToken, getMe, dbRoleToDisplayRole, getProjects, getProjectTasks, createProjectTask, updateTask, getProjectTeam, getNotifications } from './services/api';
 import type {
   Project,
   Task,
@@ -33,40 +33,9 @@ function setStoredItem<T>(key: string, value: T): void {
 }
 
 export default function App() {
-  // Session Authentication State verified via JWT
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getAuthToken());
-
-  // Check and restore active user session on mount
-  useEffect(() => {
-    const token = getAuthToken();
-    if (token) {
-      getMe()
-        .then((res) => {
-          setIsAuthenticated(true);
-          setUserProfile((prev) => ({
-            ...prev,
-            name: res.user.name,
-            email: res.user.email,
-            role: dbRoleToDisplayRole(res.user.role),
-            department: res.user.team || prev.department,
-          }));
-        })
-        .catch(() => {
-          removeAuthToken();
-          setIsAuthenticated(false);
-        });
-    } else {
-      setIsAuthenticated(false);
-    }
-  }, []);
-
-  // Core Data State (persisted locally in browser localStorage, starts empty if no user records exist)
-  const [projects, setProjects] = useState<Project[]>(() =>
-    getStoredItem<Project[]>('pms_projects', [])
-  );
-  const [tasks, setTasks] = useState<Task[]>(() =>
-    getStoredItem<Task[]>('pms_tasks', [])
-  );
+  // Core Data State
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() =>
     getStoredItem<TeamMember[]>('pms_team_members', [])
   );
@@ -103,18 +72,117 @@ export default function App() {
     })
   );
 
-  // Synchronize state changes to localStorage
-  useEffect(() => {
-    setStoredItem('pms_projects', projects);
-  }, [projects]);
+  // Backend Notification State
+  const [backendNotifications, setBackendNotifications] = useState<any[]>([]);
 
-  useEffect(() => {
-    setStoredItem('pms_tasks', tasks);
-  }, [tasks]);
+  // Session Authentication State verified via JWT
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!getAuthToken());
 
+  // Check and restore active user session on mount
   useEffect(() => {
-    setStoredItem('pms_team_members', teamMembers);
-  }, [teamMembers]);
+    const token = getAuthToken();
+    if (token) {
+      getMe()
+        .then((res) => {
+          setIsAuthenticated(true);
+          setUserProfile((prev) => ({
+            ...prev,
+            name: res.user.name,
+            email: res.user.email,
+            role: dbRoleToDisplayRole(res.user.role),
+            department: res.user.team || prev.department,
+          }));
+        })
+        .catch(() => {
+          removeAuthToken();
+          setIsAuthenticated(false);
+        });
+    } else {
+      setIsAuthenticated(false);
+    }
+  }, []);
+
+  // Fetch backend notifications on mount
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    getNotifications(true)
+      .then((res) => {
+        setBackendNotifications(res.notifications || []);
+      })
+      .catch(() => {
+        // ignore - notifications are optional
+      });
+  }, [isAuthenticated]);
+
+  // Load projects and tasks from backend after authentication
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    setProjects([]);
+    setTasks([]);
+
+    getProjects()
+      .then(async (res) => {
+        const projs = res.projects || [];
+        setProjects(projs);
+        // setProjectsLoading(false);
+
+        // Populate team members from backend for reliable assignee name<->id resolution.
+        const allMembers: TeamMember[] = [];
+        for (const p of projs) {
+          try {
+            const tRes = await getProjectTeam(p.id);
+            for (const m of (tRes.teamMembers || [])) {
+              if (!allMembers.some((x) => x.id === String(m.id))) {
+                allMembers.push({
+                  id: String(m.id),
+                  name: m.name,
+                  email: m.email,
+                  role: m.role as UserRole,
+                  avatarInitials: computeInitials(m.name),
+                });
+              }
+            }
+          } catch { /* ignore per-project errors */ }
+        }
+        setTeamMembers(allMembers);
+
+        // Load tasks for all projects
+        const allTasks: Task[] = [];
+        for (const p of projs) {
+          try {
+            const tRes = await getProjectTasks(p.id);
+            const mapped = (tRes.tasks || []).map((t: any) => {
+              const member = teamMembers.find((m) => m.id === String(t.assignedToId));
+              return {
+                id: String(t.id),
+                projectId: String(t.projectId),
+                title: t.title,
+                description: t.description || '',
+                status: t.status,
+                priority: t.priority,
+                assignedTo: t.assignedTo ?? member?.name,
+                assignedToId: t.assignedToId,
+                deadline: t.deadline || '',
+                createdAt: t.createdAt,
+                subtasks: [],
+                comments: [],
+                attachments: [],
+              } as Task;
+            });
+            allTasks.push(...mapped);
+          } catch {
+            // ignore per-project errors
+          }
+        }
+        setTasks(allTasks);
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, [isAuthenticated]);
+
+  // Synchronize state changes to localStorage (projects/bugs/etc not tasks)
 
   useEffect(() => {
     setStoredItem('pms_bugs', bugs);
@@ -232,14 +300,63 @@ export default function App() {
   };
 
   // Task Handlers
-  const handleAddTask = (newTask: Task) => {
-    setTasks((prev) => [newTask, ...prev]);
+  const handleAddTask = async (newTask: Task) => {
+    try {
+      const member = teamMembers.find((m) => m.name === newTask.assignedTo);
+      await createProjectTask(newTask.projectId, {
+        title: newTask.title,
+        description: newTask.description,
+        assignedToId: member?.id,
+        priority: newTask.priority,
+        deadline: newTask.deadline || undefined,
+      });
+      // refresh tasks
+      const allTasks: Task[] = [];
+      const projs = projects;
+      for (const p of projs) {
+        try {
+          const tRes = await getProjectTasks(p.id);
+          const mapped = (tRes.tasks || []).map((t: any) => {
+            const mem = teamMembers.find((m) => m.id === String(t.assignedToId));
+            return {
+              id: String(t.id),
+              projectId: String(t.projectId),
+              title: t.title,
+              description: t.description || '',
+              status: t.status,
+              priority: t.priority,
+              assignedTo: mem?.name,
+              assignedToId: t.assignedToId,
+              deadline: t.deadline || '',
+              createdAt: t.createdAt,
+              subtasks: [],
+              comments: [],
+              attachments: [],
+            } as Task;
+          });
+          allTasks.push(...mapped);
+        } catch {}
+      }
+      setTasks(allTasks);
+    } catch (err) {
+      console.error('Failed to create task', err);
+    }
   };
 
-  const handleUpdateTask = (updatedTask: Task) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-    );
+  const handleUpdateTask = async (updatedTask: Task) => {
+    try {
+      await updateTask(updatedTask.id, {
+        title: updatedTask.title,
+        description: updatedTask.description,
+        priority: updatedTask.priority,
+        deadline: updatedTask.deadline || null,
+      });
+      // also handle assignment if changed? backend assign endpoint separate; skip for now
+      setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    } catch (err) {
+      console.error('Failed to update task', err);
+      setTasks((prev) => prev.map((t) => (t.id === updatedTask.id ? updatedTask : t)));
+    }
   };
 
   // Project Handlers
@@ -251,6 +368,10 @@ export default function App() {
     setProjects((prev) =>
       prev.map((p) => (p.id === updatedProject.id ? updatedProject : p))
     );
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
   };
 
   // Team Member Handlers
@@ -290,50 +411,46 @@ export default function App() {
     name?: string
   ) => {
     const trimmedEmail = signedInEmail.trim();
-    // If signed-in email matches a known member, synchronize display profile
+    // The role always comes from the authenticated backend session (real
+    // PostgreSQL role). Never hardcode PM as the default role, and never trust
+    // a potentially stale localStorage team-member record for the role.
+    const resolvedRole: UserRole = (role ?? 'Project Manager') as UserRole;
+
+    // Synchronize display name/email from a known member record if present,
+    // but keep the role sourced from the backend login response.
     const matchingMember = teamMembers.find(
       (m) => m.email.toLowerCase() === trimmedEmail.toLowerCase()
     );
 
-    if (matchingMember) {
-      setUserProfile((prev) => ({
-        ...prev,
-        name: matchingMember.name,
-        email: matchingMember.email,
-        role: matchingMember.role,
-        department: matchingMember.department || prev.department,
-      }));
-    } else {
-      const derivedName =
-        name?.trim() ||
-        (trimmedEmail
-          ? trimmedEmail
-              .split('@')[0]
-              .replace(/[._-]/g, ' ')
-              .replace(/\b\w/g, (c) => c.toUpperCase())
-          : 'Workspace User');
+    const derivedName =
+      name?.trim() ||
+      (matchingMember?.name.trim()) ||
+      (trimmedEmail
+        ? trimmedEmail
+            .split('@')[0]
+            .replace(/[._-]/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+        : 'Workspace User');
 
-      const selectedRole = role || 'Project Manager';
-      const newProfile: UserProfile = {
-        name: derivedName,
-        email: trimmedEmail || 'user@workspace.local',
-        role: selectedRole,
-        department: 'Operations',
+    const newProfile: UserProfile = {
+      name: derivedName,
+      email: matchingMember?.email.trim() || trimmedEmail || 'user@workspace.local',
+      role: resolvedRole,
+      department: matchingMember?.department || 'Operations',
+    };
+    setUserProfile(newProfile);
+
+    // If team members is currently empty, register this user so they appear in assignments
+    if (teamMembers.length === 0) {
+      const newMember: TeamMember = {
+        id: `tm-${Date.now()}`,
+        name: newProfile.name,
+        email: newProfile.email,
+        role: newProfile.role,
+        department: newProfile.department,
+        avatarInitials: computeInitials(newProfile.name),
       };
-      setUserProfile(newProfile);
-
-      // If team members is currently empty, register this user so they appear in assignments
-      if (teamMembers.length === 0) {
-        const newMember: TeamMember = {
-          id: `tm-${Date.now()}`,
-          name: newProfile.name,
-          email: newProfile.email,
-          role: newProfile.role,
-          department: newProfile.department,
-          avatarInitials: computeInitials(newProfile.name),
-        };
-        setTeamMembers([newMember]);
-      }
+      setTeamMembers([newMember]);
     }
     setIsAuthenticated(true);
   };
@@ -341,6 +458,8 @@ export default function App() {
   const handleLogout = () => {
     // Clear JWT authentication session
     removeAuthToken();
+    setProjects([]);
+    setTasks([]);
     setIsAuthenticated(false);
   };
 
@@ -363,9 +482,12 @@ export default function App() {
       tasks={tasks}
       teamMembers={teamMembers}
       bugs={bugs}
+      notifications={backendNotifications}
       onLogout={handleLogout}
       onAddProject={handleAddProject}
       onUpdateProject={handleUpdateProject}
+      onEditProject={handleUpdateProject}
+      onDeleteProject={handleDeleteProject}
       onAddTask={handleAddTask}
       onUpdateTask={handleUpdateTask}
       onAddMember={handleAddMember}

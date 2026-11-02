@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   ShieldCheck,
@@ -23,6 +23,7 @@ import {
   Download,
   Trash2,
   Eye,
+  Pause,
   AlertTriangle,
   FileCheck,
   CheckSquare,
@@ -36,14 +37,13 @@ import {
 import type {
   Task,
   Project,
-  TaskReviewEntry,
-  TaskComment,
   TaskAttachment,
-  DemoSubmission,
   Subtask,
   Bug,
   UserRole,
 } from '../types/pms';
+
+import { getTask, startTask, putTaskOnHold, resumeTask, submitTask, uploadDemoZip, requestTaskCorrections, recommendTaskApproval, approveTask, requestFinalCorrections, reportBug, verifyBug, resubmitTask, createSubtask, updateSubtask, deleteSubtask, addTaskComment, uploadTaskAttachment, deleteTaskAttachment, getTaskAttachmentDownloadUrl } from '../services/api';
 
 export type { UserRole };
 
@@ -59,7 +59,70 @@ interface TaskReviewModalProps {
   onUpdateBug?: (bug: Bug) => void;
 }
 
-// Helpers
+function mapBackendTask(t: any, fallbackId: string): Task {
+  // Normalize backend UPPER_SNAKE_CASE statuses to frontend Title Case
+  const normalizeStatus = (s: string | null | undefined): Task['status'] => {
+    if (!s) return 'Not Started';
+    const upper = String(s).toUpperCase().replace(/ /g, '_');
+    const map: Record<string, Task['status']> = {
+      TODO: 'Not Started',
+      IN_PROGRESS: 'In Progress',
+      REVIEW: 'Under Review',
+      DONE: 'Completed',
+      SEEN: 'Seen',
+      ON_HOLD: 'On Hold',
+      CHANGES_REQUESTED: 'Changes Requested',
+      BUG_FIX_REQUIRED: 'Bug Fix Required',
+      READY_FOR_APPROVAL: 'Ready for Approval',
+    };
+    return map[upper] ?? 'Not Started';
+  };
+
+  return {
+    id: String(t.id ?? fallbackId),
+    title: t.title,
+    description: t.description || '',
+    projectId: String(t.projectId ?? ''),
+    status: normalizeStatus(t.status),
+    priority: t.priority,
+    assignedTo: t.assignedTo ?? undefined,
+    assignedToId: t.assignedToId ?? null,
+    deadline: t.deadline || '',
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    firstViewedAt: t.firstViewedAt ?? null,
+    onHoldReason: t.onHoldReason ?? null,
+    tlRecommendation: t.tlRecommendation,
+    reviewFeedback: t.reviewFeedback,
+    subtasks: (t.subtasks || []).map((s: any) => ({ id: String(s.id), title: s.title, completed: Boolean(s.completed) })),
+    comments: (t.comments || []).map((c: any) => ({
+      id: String(c.id),
+      authorName: c.authorName,
+      authorRole: c.authorRole,
+      authorInitials: c.authorInitials,
+      content: c.content,
+      timestamp: c.timestamp ?? c.createdAt,
+    })),
+    attachments: (t.attachments || []).map((a: any) => ({
+      id: String(a.id),
+      name: a.name,
+      size: Number(a.size) || 0,
+      type: a.type,
+      fileUrl: getTaskAttachmentDownloadUrl(String(t.id ?? fallbackId), String(a.id)),
+      uploadedBy: a.uploadedBy ? String(a.uploadedBy) : '',
+      uploadedAt: a.uploadedAt,
+    })),
+    reviewHistory: (t.reviews || []).map((r: any) => ({
+      id: String(r.id),
+      authorRole: r.authorRole as any,
+      authorName: r.authorName,
+      action: r.action,
+      comment: r.comment,
+      timestamp: r.timestamp ?? r.createdAt,
+    })),
+  };
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -96,7 +159,6 @@ export default function TaskReviewModal({
   bugs = [],
   onClose,
   onUpdateTask,
-  onAddBug,
   onUpdateBug,
 }: TaskReviewModalProps) {
   const [activeTab, setActiveTab] = useState<'workflow' | 'subtasks' | 'bugs' | 'comments' | 'attachments' | 'history'>('workflow');
@@ -115,6 +177,7 @@ export default function TaskReviewModal({
 
   // Demo Submission Form State (for Team Member)
   const [demoUrl, setDemoUrl] = useState('');
+  const [demoZipFile, setDemoZipFile] = useState<File | null>(null);
   const [demoDescription, setDemoDescription] = useState('');
   const [demoScreenshots, setDemoScreenshots] = useState<TaskAttachment[]>([]);
   const [demoVideo, setDemoVideo] = useState<TaskAttachment | undefined>(undefined);
@@ -167,43 +230,36 @@ export default function TaskReviewModal({
     totalSubtasks > 0 ? Math.round((completedSubtasksCount / totalSubtasks) * 100) : 0;
 
   // ── Subtask Handlers ──
-  const handleAddSubtask = (e: React.FormEvent) => {
+  const handleAddSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canManageSubtasks) return;
     const title = newSubtaskTitle.trim();
     if (!title) return;
-
-    const newSubtask: Subtask = {
-      id: `subtask-${Date.now()}`,
-      title,
-      completed: false,
-    };
-
-    const updatedTask: Task = {
-      ...task,
-      subtasks: [...subtasks, newSubtask],
-    };
-
-    onUpdateTask(updatedTask);
-    setNewSubtaskTitle('');
-    setSubtaskNotice(`Subtask "${title}" added.`);
-    setTimeout(() => setSubtaskNotice(null), 3000);
+    try {
+      await createSubtask(task.id, title);
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+      setNewSubtaskTitle('');
+      setSubtaskNotice(`Subtask "${title}" added.`);
+      setTimeout(() => setSubtaskNotice(null), 3000);
+    } catch (err: any) {
+      setSubtaskNotice(err?.message || 'Failed to add subtask.');
+      setTimeout(() => setSubtaskNotice(null), 3000);
+    }
   };
 
-  const handleToggleSubtask = (subtaskId: string) => {
+  const handleToggleSubtask = async (subtaskId: string) => {
     if (!canManageSubtasks) return;
-    const updatedSubtasks = subtasks.map((s) =>
-      s.id === subtaskId ? { ...s, completed: !s.completed } : s
-    );
-
-    // CRITICAL: Completing every subtask must NEVER automatically change
-    // the parent task status to 'Completed'. Parent status remains strictly unchanged.
-    const updatedTask: Task = {
-      ...task,
-      subtasks: updatedSubtasks,
-    };
-
-    onUpdateTask(updatedTask);
+    const st = subtasks.find((s) => s.id === subtaskId);
+    if (!st) return;
+    try {
+      await updateSubtask(task.id, subtaskId, { completed: !st.completed });
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+    } catch (err: any) {
+      setSubtaskNotice(err?.message || 'Failed to update subtask.');
+      setTimeout(() => setSubtaskNotice(null), 3000);
+    }
   };
 
   const handleStartEditSubtask = (subtask: Subtask) => {
@@ -212,23 +268,20 @@ export default function TaskReviewModal({
     setEditingSubtaskTitle(subtask.title);
   };
 
-  const handleSaveSubtaskEdit = (subtaskId: string) => {
+  const handleSaveSubtaskEdit = async (subtaskId: string) => {
     if (!canManageSubtasks) return;
     const title = editingSubtaskTitle.trim();
     if (!title) return;
-
-    const updatedSubtasks = subtasks.map((s) =>
-      s.id === subtaskId ? { ...s, title } : s
-    );
-
-    const updatedTask: Task = {
-      ...task,
-      subtasks: updatedSubtasks,
-    };
-
-    onUpdateTask(updatedTask);
-    setEditingSubtaskId(null);
-    setEditingSubtaskTitle('');
+    try {
+      await updateSubtask(task.id, subtaskId, { title });
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+      setEditingSubtaskId(null);
+      setEditingSubtaskTitle('');
+    } catch (err: any) {
+      setSubtaskNotice(err?.message || 'Failed to update subtask.');
+      setTimeout(() => setSubtaskNotice(null), 3000);
+    }
   };
 
   const handleCancelSubtaskEdit = () => {
@@ -236,101 +289,76 @@ export default function TaskReviewModal({
     setEditingSubtaskTitle('');
   };
 
-  const handleDeleteSubtask = (subtaskId: string) => {
+  const handleDeleteSubtask = async (subtaskId: string) => {
     if (!canManageSubtasks) return;
-    const updatedSubtasks = subtasks.filter((s) => s.id !== subtaskId);
-
-    const updatedTask: Task = {
-      ...task,
-      subtasks: updatedSubtasks,
-    };
-
-    onUpdateTask(updatedTask);
+    try {
+      await deleteSubtask(task.id, subtaskId);
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+    } catch (err: any) {
+      setSubtaskNotice(err?.message || 'Failed to delete subtask.');
+      setTimeout(() => setSubtaskNotice(null), 3000);
+    }
   };
 
   // ── Comment Handler ──
-  const handleAddComment = (e: React.FormEvent) => {
+  const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     const content = newCommentInput.trim();
     if (!content) return;
-
-    const initials = currentUserName
-      .split(/[\s._-]+/)
-      .slice(0, 2)
-      .map((s) => s.charAt(0).toUpperCase())
-      .join('') || 'U';
-
-    const newComment: TaskComment = {
-      id: `comment-${Date.now()}`,
-      authorName: currentUserName,
-      authorRole: currentUserRole,
-      authorInitials: initials,
-      content,
-      timestamp: new Date().toLocaleString(),
-    };
-
-    const updatedTask: Task = {
-      ...task,
-      comments: [...(task.comments || []), newComment],
-    };
-
-    onUpdateTask(updatedTask);
-    setNewCommentInput('');
+    try {
+      await addTaskComment(task.id, content);
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+      setNewCommentInput('');
+    } catch (err: any) {
+      setActionNotice(err?.message || 'Failed to add comment.');
+    }
   };
 
   // ── General Attachments Handler ──
-  const handleGeneralFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGeneralFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setAttachmentError(null);
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
-    const newAttachments: TaskAttachment[] = [];
-    const MAX_SIZE = 15 * 1024 * 1024; // 15MB
-    const FORBIDDEN_EXTS = ['.exe', '.bat', '.cmd', '.sh', '.msi', '.vbs', '.js'];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-
-      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (FORBIDDEN_EXTS.includes(ext)) {
-        setAttachmentError(`Security Alert: Executable script files (${ext}) are not permitted.`);
-        e.target.value = '';
-        return;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await uploadTaskAttachment(task.id, files[i]);
       }
-
-      if (file.size > MAX_SIZE) {
-        setAttachmentError(`File "${file.name}" exceeds the maximum allowed size of 15MB.`);
-        e.target.value = '';
-        return;
-      }
-
-      const fileUrl = URL.createObjectURL(file);
-      newAttachments.push({
-        id: `att-${Date.now()}-${i}`,
-        name: file.name,
-        size: file.size,
-        type: file.type || 'application/octet-stream',
-        fileUrl,
-        uploadedBy: currentUserName,
-        uploadedAt: new Date().toLocaleString(),
-      });
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Failed to upload attachment.');
     }
-
-    const updatedTask: Task = {
-      ...task,
-      attachments: [...(task.attachments || []), ...newAttachments],
-    };
-
-    onUpdateTask(updatedTask);
     e.target.value = '';
   };
 
-  const handleRemoveAttachment = (attachmentId: string) => {
-    const updatedTask: Task = {
-      ...task,
-      attachments: (task.attachments || []).filter((a) => a.id !== attachmentId),
-    };
-    onUpdateTask(updatedTask);
+  const handleDownloadAttachment = async (file: TaskAttachment) => {
+    try {
+      const url = getTaskAttachmentDownloadUrl(task.id, file.id);
+      const token = (await import('../services/api')).getAuthToken();
+      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Failed to download attachment.');
+    }
+  };
+  const handleRemoveAttachment = async (attachmentId: string) => {
+    try {
+      await deleteTaskAttachment(task.id, attachmentId);
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+    } catch (err: any) {
+      setAttachmentError(err?.message || 'Failed to delete attachment.');
+    }
   };
 
   // ── Demo Submission Upload Handlers ──
@@ -418,120 +446,159 @@ export default function TaskReviewModal({
   };
 
   // Submit Formal Demo
-  const handleSubmitFormalDemo = (e: React.FormEvent) => {
+  const handleSubmitFormalDemo = async (e: React.FormEvent) => {
     e.preventDefault();
     setDemoFormError(null);
-
-    // Validate live demo URL
-    if (!demoUrl.trim()) {
-      setDemoFormError('A Live Demo URL is required for formal completion submission.');
-      return;
-    }
-    if (!isValidHttpUrl(demoUrl)) {
-      setDemoFormError('Please enter a valid URL starting with http:// or https:// (e.g., https://demo.example.com)');
-      return;
-    }
 
     if (!demoDescription.trim()) {
       setDemoFormError('Please provide a short description of the completed work.');
       return;
     }
 
-    const timestamp = new Date().toLocaleString();
-    const submission: DemoSubmission = {
-      id: `demo-sub-${Date.now()}`,
-      demoUrl: demoUrl.trim(),
-      description: demoDescription.trim(),
-      submittedBy: currentUserName,
-      submittedRole: currentUserRole,
-      submittedAt: timestamp,
-      screenshots: demoScreenshots,
-      video: demoVideo,
-      documents: demoDocs,
-    };
+    try {
+      await startTask(task.id).catch(() => {});
 
-    const newReviewEntry: TaskReviewEntry = {
-      id: `rev-${Date.now()}`,
-      authorRole: currentUserRole,
-      authorName: currentUserName,
-      action: 'submit',
-      comment: `Formal Demo Submitted: ${demoDescription.trim()} (Demo URL: ${demoUrl.trim()})`,
-      timestamp,
-    };
+      if (demoZipFile) {
+        // ZIP file upload submission
+        await uploadDemoZip(task.id, demoZipFile);
+        const taskRes = await getTask(task.id);
+        if (taskRes.success) onUpdateTask(mapBackendTask(taskRes.task, task.id));
+        setShowDemoForm(false);
+        setDemoUrl('');
+        setDemoZipFile(null);
+        setDemoDescription('');
+        setDemoScreenshots([]);
+        setDemoVideo(undefined);
+        setDemoDocs([]);
+      } else {
+        // Live URL submission
+        if (!demoUrl.trim()) {
+          setDemoFormError('A Live Demo URL is required for formal completion submission.');
+          return;
+        }
+        if (!isValidHttpUrl(demoUrl)) {
+          setDemoFormError('Please enter a valid URL starting with http:// or https:// (e.g., https://demo.example.com)');
+          return;
+        }
 
-    const updatedTask: Task = {
-      ...task,
-      status: 'Under Review',
-      tlRecommendation: undefined,
-      reviewFeedback: `[Formal Demo Submitted by ${currentUserName}]: ${demoDescription.trim()}`,
-      demoSubmission: submission,
-      reviewHistory: [newReviewEntry, ...(task.reviewHistory || [])],
-    };
-
-    onUpdateTask(updatedTask);
-    setShowDemoForm(false);
+        await submitTask(task.id, { demoUrl: demoUrl.trim(), description: demoDescription.trim() });
+        const res = await getTask(task.id);
+        if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+        setShowDemoForm(false);
+        setDemoUrl('');
+        setDemoDescription('');
+        setDemoScreenshots([]);
+        setDemoVideo(undefined);
+        setDemoDocs([]);
+      }
+    } catch (err: any) {
+      setDemoFormError(err?.message || 'Failed to submit work.');
+    }
   };
 
   // Standard Review Workflow Actions
-  const handleWorkflowAction = (
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const handleWorkflowAction = async (
     actionType: 'submit' | 'request_corrections' | 'recommend_approval' | 'final_approve'
   ) => {
-    const timestamp = new Date().toLocaleString();
-    const newEntry: TaskReviewEntry = {
-      id: `rev-${Date.now()}`,
-      authorRole: currentUserRole,
-      authorName: currentUserName,
-      action: actionType,
-      comment: commentText.trim() || undefined,
-      timestamp,
-    };
-
-    let updatedStatus: Task['status'] = task.status;
-    let updatedRecommendation: Task['tlRecommendation'] = task.tlRecommendation;
-    let updatedFeedback: string | undefined = task.reviewFeedback;
-
-    if (actionType === 'submit') {
-      updatedStatus = 'Under Review';
-      updatedFeedback = commentText.trim()
-        ? `[Submitted by ${currentUserName}]: ${commentText.trim()}`
-        : `Task submitted for review by ${currentUserName}`;
-      updatedRecommendation = undefined;
-    } else if (actionType === 'request_corrections') {
-      // Returned for revision -> back to In Progress
-      updatedStatus = 'In Progress';
-      updatedRecommendation = 'corrections_requested';
-      updatedFeedback = commentText.trim()
-        ? `[Corrections requested by ${currentUserRole} (${currentUserName})]: ${commentText.trim()}`
-        : `Corrections requested by ${currentUserRole}. Revision required.`;
-    } else if (actionType === 'recommend_approval') {
-      // Recommended by TL, remains Under Review waiting for PM final approval
-      updatedStatus = 'Under Review';
-      updatedRecommendation = 'recommended';
-      updatedFeedback = commentText.trim()
-        ? `[TL Recommendation (${currentUserName})]: Recommended for PM approval. ${commentText.trim()}`
-        : `Recommended for approval by Team Leader (${currentUserName}). Awaiting PM approval.`;
-    } else if (actionType === 'final_approve') {
-      if (!isProjectManager) {
-        setActionNotice('Permission Denied: Only Project Managers can grant final approval and complete tasks.');
-        return;
+    if (actionLoading) return;
+    setActionLoading(true);
+    setActionNotice(null);
+    try {
+      if (actionType === 'submit') {
+        await startTask(task.id).catch(() => {});
+        const isResubmission = task.status === 'Changes Requested' || task.status === 'Bug Fix Required';
+        if (isResubmission) {
+          await resubmitTask(task.id, { description: commentText.trim() || undefined });
+        } else {
+          await submitTask(task.id, { description: commentText.trim() || undefined });
+        }
+      } else if (actionType === 'request_corrections') {
+        await requestTaskCorrections(task.id, commentText.trim() || 'Corrections requested.');
+      } else if (actionType === 'recommend_approval') {
+        await recommendTaskApproval(task.id, commentText.trim() || undefined);
+      } else if (actionType === 'final_approve') {
+        if (!isProjectManager) {
+          setActionNotice('Permission Denied: Only Project Managers can grant final approval and complete tasks.');
+          setActionLoading(false);
+          return;
+        }
+        await approveTask(task.id, commentText.trim() || undefined);
       }
-      updatedStatus = 'Completed';
-      updatedFeedback = commentText.trim()
-        ? `[Final PM Approval by ${currentUserName}]: Approved & Completed. ${commentText.trim()}`
-        : `Officially approved and completed by Project Manager (${currentUserName}).`;
+      const res = await getTask(task.id);
+      if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+      setCommentText('');
+      onClose();
+    } catch (err: any) {
+      setActionNotice(err?.message || 'Action failed.');
+    } finally {
+      setActionLoading(false);
     }
-
-    const updatedTask: Task = {
-      ...task,
-      status: updatedStatus,
-      tlRecommendation: updatedRecommendation,
-      reviewFeedback: updatedFeedback,
-      reviewHistory: [newEntry, ...(task.reviewHistory || [])],
-    };
-
-    onUpdateTask(updatedTask);
-    onClose();
   };
+
+  // ── Bug Reporting (Tester) ──
+  const handleReportBug = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDemoFormError(null);
+    if (!inlineBugTitle.trim() || !inlineBugDesc.trim() || !inlineBugSteps.trim()) {
+      setDemoFormError('Please provide a title, description, and reproduction steps.');
+      return;
+    }
+    try {
+      await reportBug(task.id, {
+        title: inlineBugTitle.trim(),
+        description: inlineBugDesc.trim(),
+        severity: inlineBugSeverity,
+        reproductionSteps: inlineBugSteps.trim(),
+      });
+      const taskRes = await getTask(task.id);
+      if (taskRes.success) onUpdateTask(mapBackendTask(taskRes.task, task.id));
+      setInlineBugTitle('');
+      setInlineBugDesc('');
+      setInlineBugSteps('');
+      setShowInlineBugForm(false);
+      setDemoFormError(null);
+      setActionNotice(`Bug "${inlineBugTitle.trim()}" reported. Task is now Bug Fix Required.`);
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err: any) {
+      setDemoFormError(err?.message || 'Failed to report bug.');
+    }
+  };
+
+  // ── Bug Verification (Tester) ──
+  const handleVerifyBug = async (bugId: string, verified: boolean, notes: string) => {
+    setActionLoading(true);
+    setActionNotice(null);
+    try {
+      await verifyBug(task.id, { bugId, verified, verificationNotes: notes });
+      const taskRes = await getTask(task.id);
+      if (taskRes.success) onUpdateTask(mapBackendTask(taskRes.task, task.id));
+      setActionNotice(
+        verified ? 'Bug verified as fixed.' : 'Bug verification failed. Task returned for correction.'
+      );
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err: any) {
+      setActionNotice(err?.message || 'Failed to verify bug.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+    try {
+        const res = await getTask(task.id);
+        if (!cancelled && res.success) {
+          onUpdateTask(mapBackendTask(res.task, task.id));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [task.id]);
 
   const commentsCount = task.comments?.length || 0;
   const attachmentsCount = task.attachments?.length || 0;
@@ -718,10 +785,83 @@ export default function TaskReviewModal({
                     {task.status === 'Under Review' && <Clock className="w-4 h-4 text-amber-400" />}
                     {task.status === 'In Progress' && <Clock className="w-4 h-4 text-indigo-400" />}
                     {task.status === 'Not Started' && <Layers className="w-4 h-4 text-slate-400" />}
+                    {String(task.status) === 'Seen' && <Eye className="w-4 h-4 text-sky-400" />}
+                    {String(task.status) === 'On Hold' && <Pause className="w-4 h-4 text-orange-400" />}
+                    {String(task.status) === 'Changes Requested' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                    {String(task.status) === 'Bug Fix Required' && <BugIcon className="w-4 h-4 text-rose-400" />}
+                    {String(task.status) === 'Ready for Approval' && <ShieldCheck className="w-4 h-4 text-indigo-400" />}
                     {task.status}
                   </span>
                 </div>
 
+                {isTeamMember && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {task.status === 'Not Started' || String(task.status) === 'Seen' ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await startTask(task.id);
+                            const res = await getTask(task.id);
+                            if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                          } catch (e: any) {
+                            setActionNotice(e?.message || 'Failed to start task.');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500"
+                      >
+                        Start Task
+                      </button>
+                    ) : null}
+                    {task.status === 'In Progress' ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const reason = window.prompt('Reason for putting on hold:');
+                          if (!reason || !reason.trim()) return;
+                          try {
+                            await putTaskOnHold(task.id, reason.trim());
+                            const res = await getTask(task.id);
+                            if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                          } catch (e: any) {
+                            setActionNotice(e?.message || 'Failed to put on hold.');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-orange-600 hover:bg-orange-500"
+                      >
+                        On Hold
+                      </button>
+                    ) : null}
+                    {String(task.status) === 'On Hold' ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await resumeTask(task.id);
+                            const res = await getTask(task.id);
+                            if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                          } catch (e: any) {
+                            setActionNotice(e?.message || 'Failed to resume task.');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500"
+                      >
+                        Resume Task
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+
+                {task.firstViewedAt ? (
+                  <div className="text-[10px] text-slate-400">
+                    First viewed: {new Date(task.firstViewedAt).toLocaleString()}
+                  </div>
+                ) : null}
+                {task.onHoldReason ? (
+                  <div className="text-[10px] text-orange-300">
+                    On Hold reason: {task.onHoldReason}
+                  </div>
+                ) : null}
                 {task.tlRecommendation && (
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                     <span className="text-slate-400">TL Recommendation:</span>
@@ -956,18 +1096,49 @@ export default function TaskReviewModal({
                     </div>
                   )}
 
+                  {/* Demo ZIP Upload */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-200">
+                        ZIP Website Archive <span className="text-slate-400 font-normal">(optional — alternative to Live URL)</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400">Max 50MB</span>
+                    </div>
+                    <label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+                      <FileArchive className="w-4 h-4 text-slate-400 mb-1" />
+                      <span className="text-xs text-slate-300">
+                        {demoZipFile ? `Selected: ${demoZipFile.name}` : 'Click to attach ZIP archive'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".zip"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setDemoZipFile(file);
+                            if (file.type.includes('zip') || file.name.toLowerCase().endsWith('.zip')) {
+                              setDemoUrl(''); // clear URL when ZIP selected
+                            }
+                          }
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
                   {/* Demo URL Input */}
                   <div>
                     <label htmlFor="formalDemoUrl" className="block text-xs font-semibold text-slate-200 mb-1">
-                      Live Demo URL <span className="text-purple-400">*</span>
+                      Live Demo URL <span className={demoZipFile ? 'text-slate-400' : 'text-purple-400'}>{demoZipFile ? '' : ' *'}</span>
                     </label>
                     <input
                       id="formalDemoUrl"
                       type="url"
-                      required
+                      required={!demoZipFile}
                       value={demoUrl}
                       onChange={(e) => setDemoUrl(e.target.value)}
-                      placeholder="https://preview.example.com or http://localhost:3000"
+                      placeholder={demoZipFile ? 'ZIP selected — URL optional' : 'https://preview.example.com or http://localhost:3000'}
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
                     />
                   </div>
@@ -1249,31 +1420,89 @@ export default function TaskReviewModal({
                 {/* Project Manager Final Decision Actions */}
                 {canProjectManagerReview && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => handleWorkflowAction('request_corrections')}
-                      className="py-2.5 px-3 rounded-xl font-semibold text-xs text-amber-200 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Request Corrections</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (openTaskBugs.length > 0) {
-                          const confirmComplete = confirm(
-                            `Warning: This task has ${openTaskBugs.length} unresolved bug(s). As Project Manager, are you sure you want to grant final approval and mark Completed?`
-                          );
-                          if (!confirmComplete) return;
-                        }
-                        handleWorkflowAction('final_approve');
-                      }}
-                      className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Final PM Approval (Mark Completed)</span>
-                    </button>
+                    {task.status === 'Ready for Approval' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const feedback = window.prompt('Final corrections feedback (required):');
+                            if (!feedback || !feedback.trim()) return;
+                            try {
+                              await requestFinalCorrections(task.id, feedback.trim());
+                              const res = await getTask(task.id);
+                              if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                              setActionNotice('Final corrections requested. Task returned to Changes Requested.');
+                              setTimeout(() => setActionNotice(null), 4000);
+                            } catch (err: any) {
+                              setActionNotice(err?.message || 'Failed to request final corrections.');
+                            }
+                          }}
+                          className="py-2.5 px-3 rounded-xl font-semibold text-xs text-amber-200 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Request Final Corrections</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (openTaskBugs.length > 0) {
+                              const confirmComplete = confirm(
+                                `Warning: This task has ${openTaskBugs.length} unresolved bug(s). As Project Manager, are you sure you want to grant final approval and mark Completed?`
+                              );
+                              if (!confirmComplete) return;
+                            }
+                            try {
+                              await approveTask(task.id, commentText.trim() || undefined);
+                              const res = await getTask(task.id);
+                              if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                              setCommentText('');
+                              onClose();
+                            } catch (err: any) {
+                              setActionNotice(err?.message || 'Final approval failed.');
+                            }
+                          }}
+                          className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Final PM Approval (Mark Completed)</span>
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleWorkflowAction('request_corrections')}
+                          className="py-2.5 px-3 rounded-xl font-semibold text-xs text-amber-200 bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Request Corrections</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (openTaskBugs.length > 0) {
+                              const confirmComplete = confirm(
+                                `Warning: This task has ${openTaskBugs.length} unresolved bug(s). As Project Manager, are you sure you want to grant final approval and mark Completed?`
+                              );
+                              if (!confirmComplete) return;
+                            }
+                            try {
+                              await approveTask(task.id, commentText.trim() || undefined);
+                              const res = await getTask(task.id);
+                              if (res.success) onUpdateTask(mapBackendTask(res.task, task.id));
+                              setCommentText('');
+                              onClose();
+                            } catch (err: any) {
+                              setActionNotice(err?.message || 'Final approval failed.');
+                            }
+                          }}
+                          className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Final PM Approval (Mark Completed)</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -1519,34 +1748,7 @@ export default function TaskReviewModal({
               {/* Inline Bug Report Form */}
               {showInlineBugForm && (
                 <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!inlineBugTitle.trim() || !inlineBugDesc.trim() || !inlineBugSteps.trim()) {
-                      alert('Please provide a title, description, and reproduction steps.');
-                      return;
-                    }
-                    if (onAddBug) {
-                      const timestamp = new Date().toLocaleString();
-                      const newBug: Bug = {
-                        id: `BUG-${Date.now().toString().slice(-4)}`,
-                        taskId: task.id,
-                        projectId: task.projectId,
-                        title: inlineBugTitle.trim(),
-                        description: inlineBugDesc.trim(),
-                        severity: inlineBugSeverity,
-                        reproductionSteps: inlineBugSteps.trim(),
-                        assignedTo: task.assignedTo,
-                        reportedBy: currentUserName,
-                        reportedAt: timestamp,
-                        status: task.assignedTo ? 'Assigned' : 'Open',
-                      };
-                      onAddBug(newBug);
-                      setInlineBugTitle('');
-                      setInlineBugDesc('');
-                      setInlineBugSteps('');
-                      setShowInlineBugForm(false);
-                    }
-                  }}
+                  onSubmit={handleReportBug}
                   className="p-4 rounded-xl bg-slate-900/90 border border-rose-500/40 space-y-3"
                 >
                   <h5 className="text-xs font-bold text-rose-300">File Defect on Task "{task.title}"</h5>
@@ -1754,34 +1956,63 @@ export default function TaskReviewModal({
 
                             {(b.status === 'Retesting' || b.status === 'Fixed') && (
                               <>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onUpdateBug({
-                                      ...b,
-                                      status: 'Verified',
-                                      resolutionNotes: `[Verified by ${currentUserName}]`,
-                                      updatedAt: new Date().toLocaleString(),
-                                    })
-                                  }
-                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
-                                >
-                                  Verify Fix
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onUpdateBug({
-                                      ...b,
-                                      status: 'Reopened',
-                                      resolutionNotes: `[Reopened by ${currentUserName}]`,
-                                      updatedAt: new Date().toLocaleString(),
-                                    })
-                                  }
-                                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
-                                >
-                                  Reopen
-                                </button>
+                                {isTester ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const notes = window.prompt('Verification notes (optional):');
+                                        if (notes === null) return;
+                                        handleVerifyBug(b.id, true, notes || '');
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    >
+                                      Verify Fix
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const notes = window.prompt('Rejection reason (required):');
+                                        if (!notes || !notes.trim()) return;
+                                        handleVerifyBug(b.id, false, notes.trim());
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
+                                    >
+                                      Reopen
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onUpdateBug({
+                                          ...b,
+                                          status: 'Verified',
+                                          resolutionNotes: `[Verified by ${currentUserName}]`,
+                                          updatedAt: new Date().toLocaleString(),
+                                        })
+                                      }
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                                    >
+                                      Verify Fix
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        onUpdateBug({
+                                          ...b,
+                                          status: 'Reopened',
+                                          resolutionNotes: `[Reopened by ${currentUserName}]`,
+                                          updatedAt: new Date().toLocaleString(),
+                                        })
+                                      }
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
+                                    >
+                                      Reopen
+                                    </button>
+                                  </>
+                                )}
                               </>
                             )}
                           </div>
@@ -1930,14 +2161,14 @@ export default function TaskReviewModal({
                             <Eye className="w-4 h-4" />
                           </button>
                         ) : null}
-                        <a
-                          href={file.fileUrl}
-                          download={file.name}
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadAttachment(file)}
                           className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                           title="Download file"
                         >
                           <Download className="w-4 h-4" />
-                        </a>
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveAttachment(file.id)}
@@ -2053,3 +2284,4 @@ export default function TaskReviewModal({
     </div>
   );
 }
+

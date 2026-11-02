@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FolderKanban,
   Search,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  AlertCircle,
   SlidersHorizontal,
   Layers,
   X,
@@ -15,8 +16,10 @@ import {
   Briefcase,
   Users,
   ShieldCheck,
+  Edit,
 } from 'lucide-react';
 import type { Project, TeamMember, UserRole } from '../types/pms';
+import { createProject, updateProject, deleteProject, getUsers, type ApiUser } from '../services/api';
 
 export type { Project };
 
@@ -26,6 +29,8 @@ interface ProjectsPageProps {
   currentUserRole?: UserRole;
   currentUserName?: string;
   onAddProject?: (project: Project) => void;
+  onEditProject?: (project: Project) => void;
+  onDeleteProject?: (projectId: string) => void;
   onSelectProject?: (project: Project) => void;
 }
 
@@ -35,22 +40,88 @@ export default function ProjectsPage({
   currentUserRole = 'Project Manager',
   currentUserName = '',
   onAddProject,
+  onEditProject,
+  onDeleteProject,
   onSelectProject,
 }: ProjectsPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  // Split registered team members by role for the dropdowns
+  // Real users fetched from the backend (source of truth for team assignment)
+  const [availableUsers, setAvailableUsers] = useState<ApiUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [skillFilter, setSkillFilter] = useState('');
+
+  const loadAvailableUsers = async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const res = await getUsers({ status: 'active' });
+      if (res && Array.isArray(res.users)) {
+        setAvailableUsers(res.users);
+      }
+    } catch (err: any) {
+      setUsersError(err?.message || 'Failed to load users from the server.');
+      setAvailableUsers([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAvailableUsers();
+  }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Split real backend users by role for the dropdowns
   const registeredTLs = useMemo(
-    () => teamMembers.filter((m) => m.role === 'Team Leader'),
-    [teamMembers]
+    () => availableUsers.filter((u) => u.role === 'TL' && u.isActive),
+    [availableUsers]
   );
   const registeredTMs = useMemo(
-    () => teamMembers.filter((m) => m.role === 'Team Member'),
-    [teamMembers]
+    () => availableUsers.filter((u) => u.role === 'TM' && u.isActive),
+    [availableUsers]
   );
+
+  // Team Members filtered by skill search
+  const filteredTMs = useMemo(
+    () =>
+      registeredTMs.filter((tm) => {
+        const term = skillFilter.toLowerCase().trim();
+        if (!term) return true;
+        const haystack = [
+          tm.name,
+          tm.email,
+          ...(tm.skills || []),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(term);
+      }),
+    [registeredTMs, skillFilter]
+  );
+
+  // Lookup real users by ID (backend users take precedence over the prop)
+  const userLookup = useMemo(() => {
+    const map = new Map<string, { name: string; email?: string }>();
+    [...(teamMembers || []), ...availableUsers].forEach((u) => {
+      map.set(String(u.id), u);
+    });
+    return map;
+  }, [teamMembers, availableUsers]);
 
   // Controlled form state for the project creation form
   const [formData, setFormData] = useState({
@@ -59,20 +130,22 @@ export default function ProjectsPage({
     startDate: '',
     deadline: '',
     status: 'Planning' as Project['status'],
+    priority: 'Medium' as Project['priority'],
     teamLeaderId: '',
     teamMemberIds: [] as string[],
   });
 
   // State to show validation error or notice when user submits the form
   const [formError, setFormError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Filter projects when real project data is provided
   const filteredProjects = useMemo(() => {
     return projects.filter((project) => {
       const matchesSearch =
-        project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.manager.name.toLowerCase().includes(searchTerm.toLowerCase());
+        (project.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (project.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (project.manager?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStatus =
         statusFilter === 'All' || project.status === statusFilter;
@@ -83,34 +156,99 @@ export default function ProjectsPage({
 
   const handleOpenModal = () => {
     setFormError(null);
+    setEditingProject(null);
     setFormData({
       name: '',
       description: '',
       startDate: '',
       deadline: '',
       status: 'Planning',
+      priority: 'Medium',
       teamLeaderId: '',
       teamMemberIds: [],
     });
+    setIsEditModalOpen(false);
     setIsCreateModalOpen(true);
+    // Fetch the latest available users when opening the creation form
+    loadAvailableUsers();
+  };
+
+  const handleEditOpen = (project: Project) => {
+    setFormError(null);
+    setFormData({
+      name: project.name,
+      description: project.description,
+      startDate: project.startDate,
+      deadline: project.deadline,
+      status: project.status,
+      priority: project.priority,
+      teamLeaderId: project.teamLeaderId || '',
+      teamMemberIds: project.teamMemberIds || [],
+    });
+    setEditingProject(project);
+    setIsCreateModalOpen(false);
+    setIsEditModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setIsCreateModalOpen(false);
+    setIsEditModalOpen(false);
+    setEditingProject(null);
     setFormError(null);
+    setFormData({
+      name: '',
+      description: '',
+      startDate: '',
+      deadline: '',
+      status: 'Planning',
+      priority: 'Medium',
+      teamLeaderId: '',
+      teamMemberIds: [],
+    });
+    setIsEditModalOpen(false);
+    setEditingProject(null);
   };
 
   // Toggle a team member in/out of the multi-select list
-  const handleToggleMember = (memberId: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      teamMemberIds: prev.teamMemberIds.includes(memberId)
-        ? prev.teamMemberIds.filter((id) => id !== memberId)
-        : [...prev.teamMemberIds, memberId],
-    }));
+  const handleDeleteProject = async (project: Project) => {
+    if (currentUserRole !== 'Project Manager') return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the project "${project.name}"? This action cannot be undone.`
+    );
+    if (!confirmed) return;
+    if (isDeleting) return;
+
+    setIsDeleting(project.id);
+    try {
+      const res = await deleteProject(project.id);
+      if (res.success) {
+        if (onDeleteProject) {
+          onDeleteProject(project.id);
+        }
+        setToast({ type: 'success', message: 'Project deleted successfully.' });
+      } else {
+        setToast({ type: 'error', message: (res as any).error || 'Failed to delete project.' });
+      }
+    } catch (err: any) {
+      setToast({ type: 'error', message: err.message || 'Failed to delete project.' });
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleToggleMember = (memberId: string) => {
+    setFormData((prev: any) => {
+      const ids = prev.teamMemberIds || [];
+      return {
+        ...prev,
+        teamMemberIds: ids.includes(memberId)
+          ? ids.filter((id: string) => id !== memberId)
+          : [...ids, memberId],
+      };
+    });
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -126,55 +264,98 @@ export default function ProjectsPage({
       return;
     }
 
-    // Generate safe unique project ID
-    const uniqueSuffix = `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`.toUpperCase();
-    const newProjectId = `PRJ-${uniqueSuffix}`;
+    // Edit mode: update existing project via backend
+    if (editingProject) {
+      setIsCreating(true);
 
-    // Derive PM name and initials from the current logged-in user
-    const pmName = currentUserName.trim() || 'Project Manager';
-    const initials = pmName
-      .split(/[\s._-]+/)
-      .slice(0, 2)
-      .map((s) => s.charAt(0).toUpperCase())
-      .join('') || 'PM';
+      try {
+        const updated = await updateProject(editingProject.id, {
+          name: formData.name.trim(),
+          description: formData.description.trim(),
+          startDate: formData.startDate,
+          deadline: formData.deadline,
+          status: formData.status,
+          priority: formData.priority,
+          teamLeaderId: formData.teamLeaderId || undefined,
+          teamMemberIds:
+            formData.teamMemberIds.length > 0 ? [...formData.teamMemberIds] : undefined,
+        });
 
-    const newProject: Project = {
-      id: newProjectId,
-      name: formData.name.trim(),
-      description: formData.description.trim(),
-      manager: {
-        name: pmName,
-        role: 'Project Manager',
-        avatarInitials: initials,
-      },
-      startDate: formData.startDate,
-      deadline: formData.deadline,
-      status: formData.status,
-      progress: 0,
-      priority: 'Medium',
-      tasksCount: {
-        completed: 0,
-        total: 0,
-      },
-      teamLeaderId: formData.teamLeaderId || undefined,
-      teamMemberIds: formData.teamMemberIds.length > 0 ? [...formData.teamMemberIds] : undefined,
-    };
+        if (updated.success && updated.project) {
+          if (onEditProject) {
+            onEditProject(updated.project);
+          } else if (onAddProject) {
+            onAddProject(updated.project);
+          }
 
-    if (onAddProject) {
-      onAddProject(newProject);
+          setToast({ type: 'success', message: 'Project updated successfully!' });
+          setIsEditModalOpen(false);
+          setEditingProject(null);
+          setFormError(null);
+          setFormData({
+            name: '',
+            description: '',
+            startDate: '',
+            deadline: '',
+            status: 'Planning',
+            priority: 'Medium',
+            teamLeaderId: '',
+            teamMemberIds: [],
+          });
+        } else {
+          setFormError((updated as any).error || 'Failed to update project.');
+          setToast({ type: 'error', message: (updated as any).error || 'Failed to update project.' });
+        }
+      } catch (err: any) {
+        setFormError(err.message || 'Failed to update project.');
+        setToast({ type: 'error', message: err.message || 'Failed to update project.' });
+        setIsCreating(false);
+      }
+      return;
     }
 
-    // Reset form and close modal
-    setFormData({
-      name: '',
-      description: '',
-      startDate: '',
-      deadline: '',
-      status: 'Planning',
-      teamLeaderId: '',
-      teamMemberIds: [],
-    });
-    setIsCreateModalOpen(false);
+    // Create mode: send to backend
+    setIsCreating(true);
+
+    try {
+      const created = await createProject({
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        startDate: formData.startDate,
+        deadline: formData.deadline,
+        status: formData.status,
+        priority: 'Medium',
+        teamLeaderId: formData.teamLeaderId || undefined,
+        teamMemberIds:
+          formData.teamMemberIds.length > 0 ? [...formData.teamMemberIds] : undefined,
+      });
+
+      if (created.success && created.project) {
+        if (onAddProject) {
+          onAddProject(created.project);
+        }
+
+        // Reset form and close modal
+        setFormData({
+          name: '',
+          description: '',
+          startDate: '',
+          deadline: '',
+          status: 'Planning',
+          priority: 'Medium',
+          teamLeaderId: '',
+          teamMemberIds: [],
+        });
+        setIsCreateModalOpen(false);
+        setFormError(null);
+      } else {
+        setFormError((created as any).error || 'Failed to create project.');
+      }
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to create project.');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const getStatusBadge = (status: Project['status']) => {
@@ -354,7 +535,36 @@ export default function ProjectsPage({
                       <span className="text-[11px] font-mono text-purple-300/80 px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20">
                         {project.id}
                       </span>
-                      <div>{getStatusBadge(project.status)}</div>
+                      <div className="flex items-center gap-1">
+                        {currentUserRole === 'Project Manager' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditOpen(project);
+                            }}
+                            className="p-1 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                            title="Edit Project"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {currentUserRole === 'Project Manager' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteProject(project);
+                            }}
+                            disabled={isDeleting === project.id}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete Project"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {getStatusBadge(project.status)}
+                      </div>
                     </div>
 
                     {/* Project Title & Description */}
@@ -390,9 +600,9 @@ export default function ProjectsPage({
                     {/* Team Assignment Chips */}
                     {(project.teamLeaderId || (project.teamMemberIds && project.teamMemberIds.length > 0)) && (
                       <div className="mt-3 space-y-1.5">
-                        {project.teamLeaderId && (() => {
-                          const tl = teamMembers.find((m) => m.id === project.teamLeaderId);
-                          return tl ? (
+                          {project.teamLeaderId && (() => {
+                            const tl = userLookup.get(String(project.teamLeaderId));
+                            return tl ? (
                             <div className="flex items-center gap-1.5">
                               <ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
                               <span className="text-[10px] text-indigo-300 font-medium">TL:</span>
@@ -406,7 +616,7 @@ export default function ProjectsPage({
                             <span className="text-[10px] text-emerald-300 font-medium shrink-0">Team:</span>
                             <span className="text-[10px] text-slate-300 leading-relaxed">
                               {project.teamMemberIds
-                                .map((id) => teamMembers.find((m) => m.id === id)?.name)
+                                .map((id) => userLookup.get(String(id))?.name)
                                 .filter(Boolean)
                                 .join(', ')}
                             </span>
@@ -518,7 +728,7 @@ export default function ProjectsPage({
                             {project.teamLeaderId ? (
                               <div className="flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
-                                <span className="text-indigo-300">{teamMembers.find((m) => m.id === project.teamLeaderId)?.name ?? '—'}</span>
+                                <span className="text-indigo-300">{userLookup.get(String(project.teamLeaderId))?.name ?? '—'}</span>
                               </div>
                             ) : <span className="text-slate-600 italic">No TL</span>}
                             {project.teamMemberIds && project.teamMemberIds.length > 0 && (
@@ -567,9 +777,38 @@ export default function ProjectsPage({
 
                         {/* Open Details */}
                         <td className="px-4 py-4 whitespace-nowrap text-right">
-                          <span className="text-[11px] text-purple-400 font-medium">
-                            View →
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            {currentUserRole === 'Project Manager' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditOpen(project);
+                                }}
+                                className="p-1 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                                title="Edit Project"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <span className="text-[11px] text-purple-400 font-medium">
+                              View →
+                            </span>
+                            {currentUserRole === 'Project Manager' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteProject(project);
+                                }}
+                                disabled={isDeleting === project.id}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete project"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -582,7 +821,7 @@ export default function ProjectsPage({
       )}
 
       {/* 3. "Create Project" Form Modal */}
-      {isCreateModalOpen && (
+      {(isCreateModalOpen || isEditModalOpen) && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="relative w-full max-w-lg bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 sm:p-7 shadow-2xl my-8">
             {/* Modal Header */}
@@ -592,8 +831,14 @@ export default function ProjectsPage({
                   <Briefcase className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white leading-tight">Create New Project</h3>
-                  <p className="text-xs text-slate-400">Fill in the project details below</p>
+                  <h3 className="text-lg font-bold text-white leading-tight">
+                    {editingProject ? 'Edit Project' : 'Create New Project'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {editingProject
+                      ? 'Update the project details below'
+                      : 'Fill in the project details below'}
+                  </p>
                 </div>
               </div>
               <button
@@ -679,10 +924,19 @@ export default function ProjectsPage({
                 <label htmlFor="assignTL" className="block text-xs font-medium text-slate-200 mb-1">
                   Assign Team Leader
                 </label>
-                {registeredTLs.length === 0 ? (
+                {usersLoading ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-slate-700/60 text-xs text-slate-400 italic">
+                    Loading available users...
+                  </div>
+                ) : usersError ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-300">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{usersError}</span>
+                  </div>
+                ) : registeredTLs.length === 0 ? (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    No Team Leaders registered yet. Add a Team Leader in the Team page first.
+                    No active Team Leaders available. Create one in the Team page first.
                   </div>
                 ) : (
                   <select
@@ -694,7 +948,7 @@ export default function ProjectsPage({
                     <option value="" className="bg-[#0f173b]">— None (assign later) —</option>
                     {registeredTLs.map((tl) => (
                       <option key={tl.id} value={tl.id} className="bg-[#0f173b]">
-                        {tl.name} ({tl.email})
+                        {tl.name}{tl.skills && tl.skills.length > 0 ? ` — Skills: ${tl.skills.join(', ')}` : ''}
                       </option>
                     ))}
                   </select>
@@ -711,38 +965,89 @@ export default function ProjectsPage({
                     </span>
                   )}
                 </label>
-                {registeredTMs.length === 0 ? (
+                {usersLoading ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-slate-700/60 text-xs text-slate-400 italic">
+                    Loading available users...
+                  </div>
+                ) : usersError ? (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-300">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{usersError}</span>
+                  </div>
+                ) : registeredTMs.length === 0 ? (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    No Team Members registered yet. Add Team Members in the Team page first.
+                    No active Team Members available. Create Team Members in the Team page first.
                   </div>
                 ) : (
-                  <div className="rounded-xl bg-slate-900/80 border border-slate-700/80 max-h-36 overflow-y-auto divide-y divide-slate-800/60">
-                    {registeredTMs.map((tm) => {
-                      const selected = formData.teamMemberIds.includes(tm.id);
-                      return (
-                        <label
-                          key={tm.id}
-                          className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
-                            selected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/60'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={() => handleToggleMember(tm.id)}
-                            className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
-                          />
+                  <div className="space-y-2">
+                    {/* Skill search / filter */}
+                    <div>
+                      <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                        Search by name, email, or skill
+                      </label>
+                      <input
+                        id="skillFilter"
+                        value={skillFilter}
+                        onChange={(e) => setSkillFilter(e.target.value)}
+                        placeholder="e.g. React, TypeScript, PostgreSQL..."
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                      />
+                    </div>
+                    <div className="rounded-xl bg-slate-900/80 border border-slate-700/80 max-h-40 overflow-y-auto divide-y divide-slate-800/60">
+                      {filteredTMs.length === 0 && skillFilter.trim() !== '' ? (
+                        <div className="p-3 text-center text-xs text-slate-400 italic">
+                          No Team Members match the selected skill.
+                        </div>
+                      ) : (
+                        filteredTMs.map((tm) => {
+                          const selected = formData.teamMemberIds.includes(String(tm.id));
+                          return (
+                            <label
+                              key={tm.id}
+                              className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                                selected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/60'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => handleToggleMember(String(tm.id))}
+                                className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
+                              />
                           <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                            {tm.avatarInitials}
+                            {tm.name
+                              .split(/[\s._-]+/)
+                              .slice(0, 2)
+                              .map((s) => s.charAt(0).toUpperCase())
+                              .join('') || 'U'}
                           </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-medium text-white truncate">{tm.name}</div>
-                            <div className="text-[10px] text-slate-400 truncate">{tm.email}</div>
-                          </div>
-                        </label>
-                      );
-                    })}
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium text-white truncate">{tm.name}</div>
+                                <div className="text-[10px] text-slate-400 truncate">{tm.role || ''}</div>
+                                {tm.skills && tm.skills.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {tm.skills.map((skill) => (
+                                      <span
+                                        key={skill}
+                                        className="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[9px] text-purple-300"
+                                      >
+                                        {skill}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                    {filteredTMs.length === 0 && skillFilter.trim() === '' && (
+                      <div className="p-2 text-center text-xs text-slate-500 italic">
+                        No eligible Team Members available.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -811,13 +1116,26 @@ export default function ProjectsPage({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+                  disabled={isCreating}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Project
+                  {editingProject ? 'Save Changes' : isCreating ? 'Creating...' : 'Create Project'}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-[100] px-6 py-3 rounded-lg shadow-lg text-sm font-medium transition-all ${
+            toast.type === 'success'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          {toast.message}
         </div>
       )}
     </div>

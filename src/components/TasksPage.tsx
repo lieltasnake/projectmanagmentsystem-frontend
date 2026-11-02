@@ -31,6 +31,8 @@ import {
   GripVertical,
   AlertCircle,
   Bug as BugIcon,
+  Eye,
+  Pause,
 } from 'lucide-react';
 import type { Task, Project, TeamMember, Subtask, Bug } from '../types/pms';
 import TaskReviewModal, { type UserRole } from './TaskReviewModal';
@@ -53,7 +55,7 @@ export type TaskViewMode = 'list' | 'board';
 export type TaskSortField = 'deadline' | 'priority' | 'title' | 'status' | 'id';
 export type SortOrder = 'asc' | 'desc';
 
-const TASK_STATUSES: Task['status'][] = ['Not Started', 'In Progress', 'Under Review', 'Completed'];
+const TASK_STATUSES: Task['status'][] = ['Not Started', 'Seen', 'In Progress', 'On Hold', 'Under Review', 'Changes Requested', 'Bug Fix Required', 'Ready for Approval', 'Completed'];
 const PRIORITIES: Task['priority'][] = ['High', 'Medium', 'Low'];
 
 const STATUS_CONFIG: Record<
@@ -66,6 +68,20 @@ const STATUS_CONFIG: Record<
     badgeBg: 'bg-slate-700/30 text-slate-300 border-slate-600/40',
     border: 'border-slate-700/80',
     dot: 'bg-slate-400',
+  },
+  'Seen': {
+    label: 'Seen',
+    color: 'text-sky-300',
+    badgeBg: 'bg-sky-700/30 text-sky-300 border-sky-600/40',
+    border: 'border-sky-700/80',
+    dot: 'bg-sky-400',
+  },
+  'On Hold': {
+    label: 'On Hold',
+    color: 'text-orange-300',
+    badgeBg: 'bg-orange-700/30 text-orange-300 border-orange-600/40',
+    border: 'border-orange-700/80',
+    dot: 'bg-orange-400',
   },
   'In Progress': {
     label: 'In Progress',
@@ -87,6 +103,27 @@ const STATUS_CONFIG: Record<
     badgeBg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
     border: 'border-emerald-500/50',
     dot: 'bg-emerald-400',
+  },
+  'Changes Requested': {
+    label: 'Changes Requested',
+    color: 'text-amber-300',
+    badgeBg: 'bg-amber-700/30 text-amber-300 border-amber-600/40',
+    border: 'border-amber-700/80',
+    dot: 'bg-amber-400',
+  },
+  'Bug Fix Required': {
+    label: 'Bug Fix Required',
+    color: 'text-rose-300',
+    badgeBg: 'bg-rose-700/30 text-rose-300 border-rose-600/40',
+    border: 'border-rose-700/80',
+    dot: 'bg-rose-400',
+  },
+  'Ready for Approval': {
+    label: 'Ready for Approval',
+    color: 'text-indigo-300',
+    badgeBg: 'bg-indigo-700/30 text-indigo-300 border-indigo-600/40',
+    border: 'border-indigo-700/80',
+    dot: 'bg-indigo-400',
   },
 };
 
@@ -112,6 +149,20 @@ function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRec
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
           <Clock className="w-3 h-3" />
           In Progress
+        </span>
+      );
+    case 'Seen':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-700/15 text-sky-300 border border-sky-600/30">
+          <Eye className="w-3 h-3" />
+          Seen
+        </span>
+      );
+    case 'On Hold':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-orange-500/15 text-orange-300 border border-orange-500/30">
+          <Pause className="w-3 h-3" />
+          On Hold
         </span>
       );
     case 'Under Review':
@@ -307,9 +358,14 @@ export default function TasksPage({
 
     const statusRank: Record<Task['status'], number> = {
       'Not Started': 1,
-      'In Progress': 2,
-      'Under Review': 3,
-      Completed: 4,
+      'Seen': 2,
+      'In Progress': 3,
+      'On Hold': 4,
+      'Under Review': 5,
+      'Changes Requested': 6,
+      'Bug Fix Required': 7,
+      'Ready for Approval': 8,
+      Completed: 9,
     };
 
     return [...list].sort((a, b) => {
@@ -345,8 +401,13 @@ export default function TasksPage({
   const tasksByStatus = useMemo(() => {
     const grouped: Record<Task['status'], Task[]> = {
       'Not Started': [],
+      'Seen': [],
       'In Progress': [],
+      'On Hold': [],
       'Under Review': [],
+      'Changes Requested': [],
+      'Bug Fix Required': [],
+      'Ready for Approval': [],
       Completed: [],
     };
     filteredTasks.forEach((t) => {

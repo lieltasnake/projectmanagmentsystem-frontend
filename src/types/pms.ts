@@ -28,7 +28,7 @@ export interface TaskReviewEntry {
   id: string;
   authorRole: UserRole;
   authorName: string;
-  action: 'submit' | 'request_corrections' | 'recommend_approval' | 'final_approve' | 'fail_testing' | 'pass_testing';
+  action: 'submit' | 'request_corrections' | 'recommend_approval' | 'final_approve' | 'fail_testing' | 'pass_testing' | 'request_final_corrections';
   comment?: string;
   timestamp: string;
 }
@@ -80,23 +80,33 @@ export interface Bug {
   reproductionSteps: string;
   evidence?: TaskAttachment[];
   assignedTo?: string; // Developer responsible for the task
+  assignedToId?: string | null;
   reportedBy: string;  // Tester name
+  reportedById?: string | null;
   reportedAt: string;
   status: 'Open' | 'Assigned' | 'In Progress' | 'Fixed' | 'Retesting' | 'Verified' | 'Reopened';
   resolutionNotes?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
   updatedAt?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
+  description?: string;
   projectId: string;
   assignedTo?: string;
-  status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+  assignedToId?: string | null;
+  status: 'Not Started' | 'Seen' | 'In Progress' | 'On Hold' | 'Under Review' | 'Changes Requested' | 'Bug Fix Required' | 'Ready for Approval' | 'Completed';
   priority: 'High' | 'Medium' | 'Low';
   deadline: string;
+  createdAt?: string;
+  updatedAt?: string;
   tlRecommendation?: 'recommended' | 'corrections_requested';
   reviewFeedback?: string;
+  firstViewedAt?: string | null;
+  onHoldReason?: string | null;
   reviewHistory?: TaskReviewEntry[];
   comments?: TaskComment[];
   attachments?: TaskAttachment[];
@@ -111,6 +121,7 @@ export interface TeamMember {
   role: UserRole;
   department?: string;
   avatarInitials: string;
+  skills?: string[];
 }
 
 export interface AppNotification {
@@ -155,5 +166,6 @@ export interface AppearanceSettings {
   accentColor: 'purple' | 'indigo' | 'emerald' | 'blue';
   compactMode: boolean;
 }
+
 
 

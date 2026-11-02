@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import type { Project, Task, TeamMember, Bug } from '../types/pms';
 import TaskReviewModal, { type UserRole } from './TaskReviewModal';
+import { useProjectTeam } from '../hooks/useProjectTeam';
 
 interface ProjectDetailsPageProps {
   project: Project;
@@ -42,6 +43,7 @@ interface ProjectDetailsPageProps {
   onUpdateTask?: (task: Task) => void;
   onAddBug?: (bug: Bug) => void;
   onUpdateBug?: (bug: Bug) => void;
+  onProjectUpdated?: (project: Project) => void;
 }
 
 type TabId = 'overview' | 'tasks' | 'team';
@@ -163,7 +165,6 @@ function getPriorityBadge(priority: Task['priority']) {
 export default function ProjectDetailsPage({
   project,
   tasks,
-  teamMembers,
   currentUserRole = 'Project Manager',
   currentUserName = 'Workspace User',
   bugs = [],
@@ -172,8 +173,12 @@ export default function ProjectDetailsPage({
   onUpdateTask,
   onAddBug,
   onUpdateBug,
+  onProjectUpdated,
 }: ProjectDetailsPageProps) {
+  void onProjectUpdated;
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+
+  const { members: hookTeamMembers } = useProjectTeam(project.id);
 
   const projectTasks = tasks.filter((t) => t.projectId === project.id);
 
@@ -194,6 +199,9 @@ export default function ProjectDetailsPage({
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
   const handleOpenTaskModal = () => {
+    const r = String(currentUserRole || '').toUpperCase().replace(/[\s_-]+/g, '');
+    const canCreate = r === 'PROJECTMANAGER' || r === 'PM' || r === 'TEAMLEADER' || r === 'TL';
+    if (!canCreate) return;
     setTaskFormNotice(null);
     setTaskForm({ title: '', assignedTo: '', priority: 'Medium', deadline: '', status: 'Not Started' });
     setIsTaskModalOpen(true);
@@ -338,24 +346,15 @@ export default function ProjectDetailsPage({
     handleStatusChange(targetTask, targetStatus);
   };
 
-  const assignedTeamLeader = project.teamLeaderId
-    ? teamMembers.find((m) => m.id === project.teamLeaderId)
-    : null;
+  const assignedTeamLeader = hookTeamMembers.find((m) => m.isTeamLeader) || null;
 
-  const assignedMembers = (project.teamMemberIds || [])
-    .map((id: string) => teamMembers.find((m: TeamMember) => m.id === id))
-    .filter((m): m is TeamMember => Boolean(m));
+  const assignedMembers = hookTeamMembers.filter((m) => !m.isTeamLeader);
 
-  // Combine TL + members uniquely for project team display
-  const projectTeamMembers = [
-    ...(assignedTeamLeader ? [assignedTeamLeader] : []),
-    ...assignedMembers.filter((m: TeamMember) => m.id !== assignedTeamLeader?.id),
-  ];
 
   const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'tasks', label: `Tasks (${projectTasks.length})`, icon: CheckSquare },
-    { id: 'team', label: `Team (${projectTeamMembers.length})`, icon: Users },
+    { id: 'team', label: `Team (${hookTeamMembers.length})`, icon: Users },
   ];
 
   const taskStats = {
@@ -557,7 +556,11 @@ export default function ProjectDetailsPage({
                 {assignedTeamLeader ? (
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
-                      {assignedTeamLeader.avatarInitials}
+                      {assignedTeamLeader.name
+                        .split(/[\s._-]+/)
+                        .slice(0, 2)
+                        .map((s: string) => s.charAt(0).toUpperCase())
+                        .join('') || 'U'}
                     </span>
                     <span className="text-white font-semibold">{assignedTeamLeader.name}</span>
                   </div>
@@ -642,14 +645,20 @@ export default function ProjectDetailsPage({
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={handleOpenTaskModal}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 transition-all cursor-pointer shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Task</span>
-              </button>
+              {(() => {
+                const r = String(currentUserRole || '').toUpperCase().replace(/[\s_-]+/g, '');
+                const canCreateTask = r === 'PROJECTMANAGER' || r === 'PM' || r === 'TEAMLEADER' || r === 'TL';
+                return canCreateTask ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenTaskModal}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 transition-all cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Task</span>
+                  </button>
+                ) : null;
+              })()}
             </div>
           </div>
 
@@ -938,7 +947,7 @@ export default function ProjectDetailsPage({
               Assigned Team Leader and Team Members registered for this project.
             </p>
           </div>
-          {projectTeamMembers.length === 0 ? (
+          {hookTeamMembers.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-10 text-center flex flex-col items-center justify-center min-h-[280px]">
               <div className="w-14 h-14 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
                 <Users className="w-7 h-7" />
@@ -950,7 +959,7 @@ export default function ProjectDetailsPage({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {projectTeamMembers.map((member) => {
+              {hookTeamMembers.map((member) => {
                 const isTL = member.id === project.teamLeaderId;
                 return (
                   <div
@@ -964,7 +973,11 @@ export default function ProjectDetailsPage({
                           : 'bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-purple-500/20'
                       }`}
                     >
-                      {member.avatarInitials}
+                      {member.name
+                        .split(/[\s._-]+/)
+                        .slice(0, 2)
+                        .map((s: string) => s.charAt(0).toUpperCase())
+                        .join('') || 'U'}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -976,7 +989,7 @@ export default function ProjectDetailsPage({
                         )}
                       </div>
                       <div className="text-[11px] text-purple-300">{member.role}</div>
-                      <div className="text-[10px] text-slate-400 truncate">{member.email}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{member.skills && member.skills.length > 0 ? member.skills.join(', ') : 'No skills recorded'}</div>
                     </div>
                   </div>
                 );
@@ -1043,9 +1056,9 @@ export default function ProjectDetailsPage({
                 <label htmlFor="taskAssignee" className="block text-xs font-medium text-slate-200 mb-1">
                   Assigned To
                 </label>
-                {teamMembers.length === 0 ? (
+                {hookTeamMembers.length === 0 ? (
                   <div className="w-full px-3 py-2 rounded-xl bg-slate-900/50 border border-slate-700/60 text-xs text-slate-500 italic">
-                    No team members added yet — go to the Team page to add members.
+                    No project team members yet — go to the Team tab to add members.
                   </div>
                 ) : (
                   <select
@@ -1055,11 +1068,13 @@ export default function ProjectDetailsPage({
                     className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
                   >
                     <option value="" className="bg-[#0f173b]">— Unassigned —</option>
-                    {teamMembers.map((m) => (
-                      <option key={m.id} value={m.name} className="bg-[#0f173b]">
-                        {m.name} ({m.role})
-                      </option>
-                    ))}
+                    {hookTeamMembers
+                      .filter((m: any) => m.isActive !== false)
+                      .map((m: any) => (
+                        <option key={m.id} value={m.id} className="bg-[#0f173b]">
+                          {m.name}{m.skills && m.skills.length > 0 ? ` — Skills: ${m.skills.join(', ')}` : ' — No skills recorded'}
+                        </option>
+                      ))}
                   </select>
                 )}
               </div>
