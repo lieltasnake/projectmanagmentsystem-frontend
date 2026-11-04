@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   CheckSquare,
   Plus,
@@ -34,8 +34,9 @@ import {
   Eye,
   Pause,
 } from 'lucide-react';
-import type { Task, Project, TeamMember, Subtask, Bug } from '../types/pms';
+import type { Task, Project, TeamMember, Subtask, Bug, ProjectStatus } from '../types/pms';
 import TaskReviewModal, { type UserRole } from './TaskReviewModal';
+import { getProjectStatuses } from '../services/api';
 
 interface TasksPageProps {
   tasks?: Task[];
@@ -127,7 +128,35 @@ const STATUS_CONFIG: Record<
   },
 };
 
-function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRecommendation']) {
+function getTaskStatusBadge(
+  status: Task['status'],
+  recommendation?: Task['tlRecommendation'],
+  isLegacyDone = false,
+  customColor?: string | null
+) {
+  if (isLegacyDone) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-900/20 text-rose-400 border border-rose-500/30">
+        <AlertTriangle className="w-3 h-3" />
+        Legacy/Unapproved DONE
+      </span>
+    );
+  }
+  if (customColor) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-sm"
+        style={{
+          backgroundColor: `${customColor}20`,
+          borderColor: `${customColor}50`,
+          color: customColor,
+        }}
+      >
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: customColor }} />
+        <span>{status}</span>
+      </span>
+    );
+  }
   switch (status) {
     case 'Completed':
       return (
@@ -168,7 +197,7 @@ function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRec
     case 'Under Review':
       if (recommendation === 'recommended') {
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent-soft text-accent-light border border-accent/30">
             <ShieldCheck className="w-3 h-3" />
             TL Recommended
           </span>
@@ -266,14 +295,14 @@ export default function TasksPage({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskTitle, setEditingTaskTitle] = useState('');
 
-  // Inline Quick Subtask Adding
-  const [quickSubtaskTaskId, setQuickSubtaskTaskId] = useState<string | null>(null);
-  const [quickSubtaskTitle, setQuickSubtaskTitle] = useState('');
-
   // Inline Quick Task Adding per status
   const [quickAddStatus, setQuickAddStatus] = useState<Task['status'] | null>(null);
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [quickAddProjectId, setQuickAddProjectId] = useState<string>('');
+
+  // Inline Quick Subtask Adding (for list view)
+  const [quickSubtaskTaskId, setQuickSubtaskTaskId] = useState<string | null>(null);
+  const [quickSubtaskTitle, setQuickSubtaskTitle] = useState('');
 
   // Drag-and-drop state for Board View
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -285,17 +314,75 @@ export default function TasksPage({
   // Expanded subtask checklists on cards / rows
   const [expandedSubtasks, setExpandedSubtasks] = useState<Record<string, boolean>>({});
 
+  // Central project-specific statuses map: projectId -> ProjectStatus[]
+  const [projectStatusesMap, setProjectStatusesMap] = useState<Record<string, ProjectStatus[]>>({});
+
   // Task creation modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubtaskMode, setIsSubtaskMode] = useState(false);
+  const [subtaskParentTask, setSubtaskParentTask] = useState<Task | null>(null);
   const [taskForm, setTaskForm] = useState({
     title: '',
+    description: '',
     projectId: '',
     assignedTo: '',
+    assignedToId: '' as string | undefined,
     priority: 'Medium' as Task['priority'],
     deadline: '',
     status: 'Not Started' as Task['status'],
+    statusId: '' as string | undefined,
   });
   const [formNotice, setFormNotice] = useState<string | null>(null);
+
+  // Load statuses for all projects on mount and whenever projects update
+  useEffect(() => {
+    let isMounted = true;
+    const fetchStatuses = async () => {
+      const map: Record<string, ProjectStatus[]> = {};
+      for (const p of projects) {
+        try {
+          const res = await getProjectStatuses(p.id);
+          if (res && Array.isArray(res.statuses)) {
+            map[p.id] = res.statuses;
+          }
+        } catch {}
+      }
+      if (isMounted) {
+        setProjectStatusesMap((prev) => ({ ...prev, ...map }));
+      }
+    };
+    if (projects.length > 0) {
+      fetchStatuses();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [projects]);
+
+  // Helper to load statuses for a single project on demand
+  const loadProjectStatuses = useCallback(async (projectId: string) => {
+    if (!projectId) return;
+    try {
+      const res = await getProjectStatuses(projectId);
+      if (res && Array.isArray(res.statuses)) {
+        setProjectStatusesMap((prev) => ({ ...prev, [projectId]: res.statuses }));
+      }
+    } catch {}
+  }, []);
+
+  const getProjectStatusNames = useCallback((projectId: string): string[] => {
+    const list = projectStatusesMap[projectId];
+    if (list && list.length > 0) {
+      return list.map((s) => s.name);
+    }
+    return ['Not Started', 'In Progress', 'Under Review', 'Completed'];
+  }, [projectStatusesMap]);
+
+  // Legacy/Unapproved DONE check (available for use in render)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isLegacyUnapprovedDone = useCallback((task: Task): boolean => {
+    return (task as any).statusId === null && (task.status === 'Completed' || task.status === 'DONE');
+  }, []);
 
   // Review & Approval modal state
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
@@ -397,28 +484,32 @@ export default function TasksPage({
     projectMap,
   ]);
 
+  // Active statuses list derived from project-specific statuses
+  const activeStatusesList = useMemo(() => {
+    if (projectFilter !== 'All' && projectFilter) {
+      return getProjectStatusNames(projectFilter);
+    }
+    const set = new Set<string>();
+    Object.values(projectStatusesMap).forEach((list) => {
+      list.forEach((s) => set.add(s.name));
+    });
+    if (set.size > 0) return Array.from(set);
+    return ['Not Started', 'In Progress', 'Under Review', 'Completed'];
+  }, [projectFilter, projectStatusesMap, getProjectStatusNames]);
+
   // Group tasks by status for List and Board views
   const tasksByStatus = useMemo(() => {
-    const grouped: Record<Task['status'], Task[]> = {
-      'Not Started': [],
-      'Seen': [],
-      'In Progress': [],
-      'On Hold': [],
-      'Under Review': [],
-      'Changes Requested': [],
-      'Bug Fix Required': [],
-      'Ready for Approval': [],
-      Completed: [],
-    };
+    const grouped: Record<string, Task[]> = {};
+    activeStatusesList.forEach((s: string) => {
+      grouped[s] = [];
+    });
     filteredTasks.forEach((t) => {
-      if (grouped[t.status]) {
-        grouped[t.status].push(t);
-      } else {
-        grouped['Not Started'].push(t);
-      }
+      const s = t.status || 'Not Started';
+      if (!grouped[s]) grouped[s] = [];
+      grouped[s].push(t);
     });
     return grouped;
-  }, [filteredTasks]);
+  }, [filteredTasks, activeStatusesList]);
 
   // Status Change Handler with strict workflow and role governance
   const handleStatusChange = (task: Task, newStatus: Task['status']) => {
@@ -584,32 +675,6 @@ export default function TasksPage({
     onUpdateTask(updatedTask);
   };
 
-  // Inline Subtask Adding
-  const handleAddSubtaskInline = (task: Task) => {
-    const title = quickSubtaskTitle.trim();
-    if (!title || !onUpdateTask) return;
-    if (task.status === 'Completed' || !canManageTask(task)) {
-      setPermissionNotice('Permission Denied: Cannot add subtasks to this task.');
-      setTimeout(() => setPermissionNotice(null), 3000);
-      return;
-    }
-
-    const currentSubtasks = task.subtasks || [];
-    const newSubtask: Subtask = {
-      id: `subtask-${Date.now()}`,
-      title,
-      completed: false,
-    };
-
-    onUpdateTask({
-      ...task,
-      subtasks: [...currentSubtasks, newSubtask],
-    });
-
-    setQuickSubtaskTitle('');
-    setQuickSubtaskTaskId(null);
-  };
-
   // Inline Subtask Deleting
   const handleDeleteSubtask = (task: Task, subtaskId: string) => {
     if (!onUpdateTask || task.status === 'Completed' || !canManageTask(task)) return;
@@ -618,6 +683,29 @@ export default function TasksPage({
       ...task,
       subtasks: currentSubtasks.filter((s) => s.id !== subtaskId),
     });
+  };
+
+  // Inline Subtask Adding (kept for list view quick-add input)
+  const handleAddSubtaskInline = (task: Task) => {
+    const title = quickSubtaskTitle.trim();
+    if (!title || !onUpdateTask) return;
+    if (task.status === 'Completed' || !canManageTask(task)) {
+      setPermissionNotice('Permission Denied: Cannot add subtasks to this task.');
+      setTimeout(() => setPermissionNotice(null), 3000);
+      return;
+    }
+    const currentSubtasks = task.subtasks || [];
+    const newSubtask: Subtask = {
+      id: `subtask-${Date.now()}`,
+      title,
+      completed: false,
+    };
+    onUpdateTask({
+      ...task,
+      subtasks: [...currentSubtasks, newSubtask],
+    });
+    setQuickSubtaskTitle('');
+    setQuickSubtaskTaskId(null);
   };
 
   // Quick Task Adding for a Column / Status Group
@@ -632,6 +720,8 @@ export default function TasksPage({
       return;
     }
 
+    const pStatuses = projectStatusesMap[projectId] || [];
+    const matched = pStatuses.find((s) => s.name.toLowerCase() === status.toLowerCase());
     const newTask: Task = {
       id: `task-${Date.now()}`,
       projectId,
@@ -640,6 +730,7 @@ export default function TasksPage({
       priority: 'Medium',
       deadline: '',
       status,
+      statusId: matched ? String(matched.id) : undefined,
       subtasks: [],
     };
 
@@ -648,45 +739,106 @@ export default function TasksPage({
     setQuickAddStatus(null);
   };
 
-  // Modal Task Creation
+  // Modal Task Creation - Open for subtask
+  const handleOpenSubtaskModal = (parentTask: Task) => {
+    setFormNotice(null);
+    setIsSubtaskMode(true);
+    setSubtaskParentTask(parentTask);
+    const pId = parentTask.projectId;
+    const pStatuses = projectStatusesMap[pId] || [];
+    const firstStatus = pStatuses[0]?.name || 'Not Started';
+    const firstStatusId = pStatuses[0] ? String(pStatuses[0].id) : undefined;
+    setTaskForm({ title: '', description: '', projectId: pId, assignedTo: parentTask.assignedTo || '', assignedToId: parentTask.assignedToId || '', priority: parentTask.priority || 'Medium', deadline: '', status: firstStatus as Task['status'], statusId: firstStatusId });
+    setIsModalOpen(true);
+    if (pId && pStatuses.length === 0) loadProjectStatuses(pId);
+  };
+
   const handleOpenModal = () => {
     setFormNotice(null);
-    setTaskForm({
-      title: '',
-      projectId: projects.length > 0 ? projects[0].id : '',
-      assignedTo: '',
-      priority: 'Medium',
-      deadline: '',
-      status: 'Not Started',
-    });
+    setIsSubtaskMode(false);
+    setSubtaskParentTask(null);
+    const initialProjectId = projectFilter !== 'All' && projectFilter ? projectFilter : projects.length > 0 ? projects[0].id : '';
+    const pStatuses = projectStatusesMap[initialProjectId] || [];
+    const firstStatus = pStatuses[0]?.name || 'Not Started';
+    const firstStatusId = pStatuses[0] ? String(pStatuses[0].id) : undefined;
+    setTaskForm({ title: '', description: '', projectId: initialProjectId, assignedTo: '', assignedToId: '', priority: 'Medium', deadline: '', status: firstStatus as Task['status'], statusId: firstStatusId });
     setIsModalOpen(true);
+    if (initialProjectId && pStatuses.length === 0) loadProjectStatuses(initialProjectId);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setFormNotice(null);
+    setIsSubtaskMode(false);
+    setSubtaskParentTask(null);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskForm.projectId) return;
+    if (!taskForm.projectId || !taskForm.title.trim()) return;
+
+    const member = teamMembers.find(
+      (m) => m.name === taskForm.assignedTo || m.id === taskForm.assignedToId
+    );
+    const assignedToId = taskForm.assignedToId || member?.id;
+
+    let statusId = taskForm.statusId;
+    const pStatuses = projectStatusesMap[taskForm.projectId] || [];
+    if (!statusId) {
+      const matched = pStatuses.find(
+        (s) => s.name.toLowerCase() === taskForm.status.toLowerCase()
+      );
+      if (matched) statusId = String(matched.id);
+    }
+
+    if (isSubtaskMode && subtaskParentTask && onUpdateTask) {
+      const currentSubtasks = subtaskParentTask.subtasks || [];
+      const newSubtask: Subtask = {
+        id: `subtask-${Date.now()}`,
+        title: taskForm.title.trim(),
+        completed: false,
+      };
+      try {
+        await onUpdateTask({
+          ...subtaskParentTask,
+          subtasks: [...currentSubtasks, newSubtask],
+        });
+        setFormNotice(`Subtask added.`);
+        setTimeout(() => {
+          handleCloseModal();
+        }, 700);
+      } catch (err: any) {
+        setFormNotice(`Failed to add subtask: ${err?.message || 'Unknown error'}`);
+      }
+      return;
+    }
+
     const newTask: Task = {
       id: `task-${Date.now()}`,
       projectId: taskForm.projectId,
-      title: taskForm.title,
-      assignedTo: taskForm.assignedTo || undefined,
+      title: taskForm.title.trim(),
+      description: taskForm.description || '',
+      assignedTo: member?.name || taskForm.assignedTo || undefined,
+      assignedToId: assignedToId ? String(assignedToId) : undefined,
       priority: taskForm.priority,
-      deadline: taskForm.deadline,
+      deadline: taskForm.deadline || '',
       status: taskForm.status,
+      statusId: statusId ? String(statusId) : undefined,
       subtasks: [],
     };
-    if (onAddTask) {
-      onAddTask(newTask);
-      setFormNotice(`Task "${newTask.title}" has been created successfully.`);
-    } else {
-      setFormNotice(
-        `Frontend form verified: Task "${newTask.title}" is ready for backend API storage.`
-      );
+
+    try {
+      if (onAddTask) {
+        await onAddTask(newTask);
+        setFormNotice(`Task created.`);
+      } else {
+        setFormNotice(`Task created.`);
+      }
+      setTimeout(() => {
+        handleCloseModal();
+      }, 700);
+    } catch (err: any) {
+      setFormNotice(`Failed to create task: ${err?.message || 'Unknown error'}`);
     }
   };
 
@@ -734,7 +886,7 @@ export default function TasksPage({
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Tasks
             </h2>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-light border border-accent/30">
               {tasks.length} {tasks.length === 1 ? 'Task' : 'Tasks'}
             </span>
           </div>
@@ -751,7 +903,7 @@ export default function TasksPage({
               onClick={() => handleSetViewMode('list')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                  ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-md shadow-accent/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
               }`}
               title="Switch to List View"
@@ -768,7 +920,7 @@ export default function TasksPage({
               onClick={() => handleSetViewMode('board')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'board'
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                  ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-md shadow-accent/30'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
               }`}
               title="Switch to Board View"
@@ -787,7 +939,7 @@ export default function TasksPage({
             onClick={noProjects ? undefined : handleOpenModal}
             disabled={noProjects}
             title={noProjects ? 'Create a project first before adding tasks.' : 'Add a new task'}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent-hover hover:to-accent-hover shadow-lg shadow-accent/25 disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>New Task</span>
@@ -833,7 +985,7 @@ export default function TasksPage({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search tasks by title, ID, assignee, or project..."
-              className="w-full pl-10 pr-9 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+              className="w-full pl-10 pr-9 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80"
             />
             {searchTerm && (
               <button
@@ -850,7 +1002,7 @@ export default function TasksPage({
           <div className="flex flex-wrap items-center gap-2">
             {/* Project Filter */}
             <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/80 border border-slate-700/80 rounded-xl px-2.5 py-1.5">
-              <FolderKanban className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <FolderKanban className="w-3.5 h-3.5 text-accent-light shrink-0" />
               <select
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
@@ -927,7 +1079,7 @@ export default function TasksPage({
               <select
                 value={sortField}
                 onChange={(e) => setSortField(e.target.value as TaskSortField)}
-                className="bg-transparent text-xs text-purple-300 focus:outline-none cursor-pointer font-medium"
+                className="bg-transparent text-xs text-accent-light focus:outline-none cursor-pointer font-medium"
               >
                 <option value="id" className="bg-[#0f173b]">Date Created (ID)</option>
                 <option value="deadline" className="bg-[#0f173b]">Deadline</option>
@@ -941,7 +1093,7 @@ export default function TasksPage({
                 className="p-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
                 title={sortOrder === 'asc' ? 'Ascending (click to change)' : 'Descending (click to change)'}
               >
-                {sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-400" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-400" />}
+                {sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-accent-light" /> : <ArrowDown className="w-3.5 h-3.5 text-accent-light" />}
               </button>
             </div>
 
@@ -949,7 +1101,7 @@ export default function TasksPage({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="text-xs text-purple-400 hover:text-purple-300 underline font-medium cursor-pointer"
+                className="text-xs text-accent-light hover:text-accent-light underline font-medium cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -988,7 +1140,7 @@ export default function TasksPage({
           <button
             type="button"
             onClick={handleResetFilters}
-            className="mt-3 px-3 py-1.5 rounded-lg text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/30 cursor-pointer"
+            className="mt-3 px-3 py-1.5 rounded-lg text-xs bg-accent-soft text-accent-light border border-accent/30 hover:bg-accent-soft cursor-pointer"
           >
             Clear Filters
           </button>
@@ -1040,7 +1192,7 @@ export default function TasksPage({
                       setQuickAddTitle('');
                       setQuickAddProjectId(projects.length > 0 ? projects[0].id : '');
                     }}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-accent-light hover:text-accent-light transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Task</span>
@@ -1049,7 +1201,7 @@ export default function TasksPage({
 
                 {/* Inline Quick Add Task Row */}
                 {quickAddStatus === statusKey && (
-                  <div className="p-3 bg-purple-950/20 border-b border-purple-500/30 flex flex-wrap items-center gap-2">
+                  <div className="p-3 bg-accent-soft border-b border-accent/30 flex flex-wrap items-center gap-2">
                     <input
                       type="text"
                       autoFocus
@@ -1060,7 +1212,7 @@ export default function TasksPage({
                         if (e.key === 'Escape') setQuickAddStatus(null);
                       }}
                       placeholder={`Enter task title for ${statusKey}... (Press Enter to save)`}
-                      className="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg bg-slate-900 border border-purple-500/60 text-xs text-white placeholder-slate-500 focus:outline-none"
+                      className="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg bg-slate-900 border border-accent/60 text-xs text-white placeholder-slate-500 focus:outline-none"
                     />
                     <select
                       value={quickAddProjectId}
@@ -1077,7 +1229,7 @@ export default function TasksPage({
                       type="button"
                       disabled={!quickAddTitle.trim()}
                       onClick={() => handleQuickAddTask(statusKey)}
-                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-semibold hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-accent to-accent-hover text-white text-xs font-semibold hover:from-accent hover:to-accent-hover disabled:opacity-50 cursor-pointer"
                     >
                       Save Task
                     </button>
@@ -1142,7 +1294,7 @@ export default function TasksPage({
                                           if (e.key === 'Enter') handleSaveEditTitle(task);
                                           if (e.key === 'Escape') setEditingTaskId(null);
                                         }}
-                                        className="w-full px-2 py-1 text-xs rounded bg-slate-900 border border-purple-500 text-white focus:outline-none"
+                                        className="w-full px-2 py-1 text-xs rounded bg-slate-900 border border-accent text-white focus:outline-none"
                                       />
                                       <button
                                         type="button"
@@ -1184,7 +1336,7 @@ export default function TasksPage({
                                     </span>
 
                                     {task.comments && task.comments.length > 0 && (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-light bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
                                         <MessageSquare className="w-2.5 h-2.5" />
                                         {task.comments.length}
                                       </span>
@@ -1215,7 +1367,7 @@ export default function TasksPage({
                                       <button
                                         type="button"
                                         onClick={() => toggleSubtaskExpand(task.id)}
-                                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30 hover:bg-purple-500/25 transition-colors cursor-pointer"
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-light bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30 hover:bg-accent/25 transition-colors cursor-pointer"
                                         title="Click to expand/collapse checklist"
                                       >
                                         <CheckSquare className="w-2.5 h-2.5" />
@@ -1236,12 +1388,12 @@ export default function TasksPage({
                                     <div className="mt-2 p-2 rounded-xl bg-slate-900/70 border border-slate-800 space-y-1.5 max-w-sm">
                                       <div className="flex items-center justify-between text-[10px]">
                                         <span className="font-semibold text-slate-300 flex items-center gap-1">
-                                          <CheckSquare className="w-3 h-3 text-purple-400" />
+                                          <CheckSquare className="w-3 h-3 text-accent-light" />
                                           <span>
                                             {completedSubtasks} of {totalSubtasks} completed
                                           </span>
                                         </span>
-                                        <span className="font-mono text-purple-300 font-bold">
+                                        <span className="font-mono text-accent-light font-bold">
                                           {subtaskPercent}%
                                         </span>
                                       </div>
@@ -1250,7 +1402,7 @@ export default function TasksPage({
                                           className={`h-full rounded-full transition-all duration-300 ${
                                             completedSubtasks === totalSubtasks
                                               ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                                              : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                              : 'bg-gradient-to-r from-accent to-accent-hover'
                                           }`}
                                           style={{ width: `${subtaskPercent}%` }}
                                         />
@@ -1275,7 +1427,7 @@ export default function TasksPage({
                                                   className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
                                                     st.completed
                                                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                                                      : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                                                      : 'border-slate-700 bg-slate-800 text-transparent hover:border-accent'
                                                   } ${
                                                     task.status !== 'Completed' && canManageTask(task)
                                                       ? 'cursor-pointer'
@@ -1329,13 +1481,13 @@ export default function TasksPage({
                                                   if (e.key === 'Enter') handleAddSubtaskInline(task);
                                                 }}
                                                 placeholder="+ Add subtask..."
-                                                className="w-full px-2 py-0.5 text-[10px] rounded bg-slate-900 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+                                                className="w-full px-2 py-0.5 text-[10px] rounded bg-slate-900 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-accent"
                                               />
                                               {quickSubtaskTaskId === task.id && quickSubtaskTitle.trim() && (
                                                 <button
                                                   type="button"
                                                   onClick={() => handleAddSubtaskInline(task)}
-                                                  className="p-1 rounded text-purple-400 hover:text-purple-300"
+                                                  className="p-1 rounded text-accent-light hover:text-accent-light"
                                                 >
                                                   <Plus className="w-3 h-3" />
                                                 </button>
@@ -1348,7 +1500,7 @@ export default function TasksPage({
                                   )}
 
                                   {task.reviewFeedback && (
-                                    <div className="mt-1 text-[10px] text-purple-300/80 line-clamp-1 italic">
+                                    <div className="mt-1 text-[10px] text-accent-light line-clamp-1 italic">
                                       Note: {task.reviewFeedback}
                                     </div>
                                   )}
@@ -1365,8 +1517,8 @@ export default function TasksPage({
                                       }`}
                                       title={`Open project: ${project.name}`}
                                     >
-                                      <FolderKanban className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                                      <span className="text-purple-300 group-hover:text-purple-200 group-hover:underline transition-colors font-medium">
+                                      <FolderKanban className="w-3.5 h-3.5 text-accent-light shrink-0" />
+                                      <span className="text-accent-light group-hover:text-accent-light group-hover:underline transition-colors font-medium">
                                         {project.name}
                                       </span>
                                     </button>
@@ -1394,7 +1546,7 @@ export default function TasksPage({
                                     </select>
                                   ) : task.assignedTo ? (
                                     <span className="flex items-center gap-1.5">
-                                      <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[9px] flex items-center justify-center shrink-0">
+                                      <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-bold text-[9px] flex items-center justify-center shrink-0">
                                         {task.assignedTo.slice(0, 2).toUpperCase()}
                                       </div>
                                       <span>{task.assignedTo}</span>
@@ -1429,7 +1581,7 @@ export default function TasksPage({
                                 <td className="px-4 py-3.5 whitespace-nowrap font-mono text-[11px]">
                                   {task.deadline ? (
                                     <span className="flex items-center gap-1 text-slate-300">
-                                      <Calendar className="w-3 h-3 text-purple-400" />
+                                      <Calendar className="w-3 h-3 text-accent-light" />
                                       {task.deadline}
                                     </span>
                                   ) : (
@@ -1454,7 +1606,7 @@ export default function TasksPage({
                                       ))}
                                     </select>
                                   ) : (
-                                    getTaskStatusBadge(task.status, task.tlRecommendation)
+                                    getTaskStatusBadge(task.status, task.tlRecommendation, isLegacyUnapprovedDone(task))
                                   )}
                                 </td>
 
@@ -1463,7 +1615,7 @@ export default function TasksPage({
                                   <button
                                     type="button"
                                     onClick={() => setReviewingTask(task)}
-                                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                                    className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-accent-soft hover:bg-accent-soft text-accent-light border border-accent/30 transition-all cursor-pointer inline-flex items-center gap-1.5"
                                   >
                                     <MessageSquare className="w-3 h-3" />
                                     <span>
@@ -1501,7 +1653,7 @@ export default function TasksPage({
                 onDrop={(e) => handleDrop(e, statusKey)}
                 className={`rounded-2xl bg-[#0f173b]/95 border transition-all flex flex-col min-h-[420px] shadow-xl ${
                   isDropTarget
-                    ? 'border-purple-500 ring-2 ring-purple-500/30 bg-[#141d4b]'
+                    ? 'border-accent ring-2 ring-accent/30 bg-[#141d4b]'
                     : cfg.border
                 }`}
               >
@@ -1524,7 +1676,7 @@ export default function TasksPage({
                       setQuickAddTitle('');
                       setQuickAddProjectId(projects.length > 0 ? projects[0].id : '');
                     }}
-                    className="p-1 rounded text-purple-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="p-1 rounded text-accent-light hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                     title={`Add task in ${statusKey}`}
                   >
                     <Plus className="w-4 h-4" />
@@ -1533,7 +1685,7 @@ export default function TasksPage({
 
                 {/* Inline Quick Add for this column */}
                 {quickAddStatus === statusKey && (
-                  <div className="p-3 bg-purple-950/30 border-b border-purple-500/40 space-y-2">
+                  <div className="p-3 bg-accent-soft border-b border-accent/40 space-y-2">
                     <input
                       type="text"
                       autoFocus
@@ -1544,7 +1696,7 @@ export default function TasksPage({
                         if (e.key === 'Escape') setQuickAddStatus(null);
                       }}
                       placeholder="Task title... (Enter to save)"
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-purple-500/60 text-xs text-white placeholder-slate-500 focus:outline-none"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-accent/60 text-xs text-white placeholder-slate-500 focus:outline-none"
                     />
                     <div className="flex items-center gap-2">
                       <select
@@ -1562,7 +1714,7 @@ export default function TasksPage({
                         type="button"
                         disabled={!quickAddTitle.trim()}
                         onClick={() => handleQuickAddTask(statusKey)}
-                        className="px-2.5 py-1 rounded bg-purple-600 text-white text-[11px] font-semibold hover:bg-purple-500 disabled:opacity-50 cursor-pointer"
+                        className="px-2.5 py-1 rounded bg-accent text-white text-[11px] font-semibold hover:bg-accent-hover disabled:opacity-50 cursor-pointer"
                       >
                         Add
                       </button>
@@ -1601,12 +1753,12 @@ export default function TasksPage({
                           key={task.id}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
-                          className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-purple-500/60 shadow-md space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:shadow-purple-500/10"
+                          className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-accent/60 shadow-md space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:shadow-accent/10"
                         >
                           {/* Card Top Pill Row */}
                           <div className="flex items-center justify-between gap-2">
                             {project ? (
-                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 truncate max-w-[150px]">
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-accent-soft text-accent-light border border-accent/20 truncate max-w-[150px]">
                                 {project.name}
                               </span>
                             ) : (
@@ -1630,7 +1782,7 @@ export default function TasksPage({
                           {task.tlRecommendation && (
                             <div className="text-[10px]">
                               {task.tlRecommendation === 'recommended' ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent-soft text-accent-light border border-accent/30">
                                   <ShieldCheck className="w-2.5 h-2.5" />
                                   TL Recommended
                                 </span>
@@ -1662,7 +1814,7 @@ export default function TasksPage({
                                   onClick={() => toggleSubtaskExpand(task.id)}
                                   className="font-semibold text-slate-300 flex items-center gap-1 hover:text-white cursor-pointer"
                                 >
-                                  <CheckSquare className="w-3 h-3 text-purple-400" />
+                                  <CheckSquare className="w-3 h-3 text-accent-light" />
                                   <span>
                                     {completedSubtasks}/{totalSubtasks} subtasks
                                   </span>
@@ -1672,7 +1824,7 @@ export default function TasksPage({
                                     <ChevronRight className="w-2.5 h-2.5 text-slate-400" />
                                   )}
                                 </button>
-                                <span className="font-mono text-purple-300 font-bold text-[10px]">
+                                <span className="font-mono text-accent-light font-bold text-[10px]">
                                   {subtaskPercent}%
                                 </span>
                               </div>
@@ -1682,7 +1834,7 @@ export default function TasksPage({
                                   className={`h-full rounded-full transition-all duration-300 ${
                                     completedSubtasks === totalSubtasks
                                       ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                                      : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                      : 'bg-gradient-to-r from-accent to-accent-hover'
                                   }`}
                                   style={{ width: `${subtaskPercent}%` }}
                                 />
@@ -1709,7 +1861,7 @@ export default function TasksPage({
                                         className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
                                           st.completed
                                             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                                            : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                                            : 'border-slate-700 bg-slate-800 text-transparent hover:border-accent'
                                         } ${
                                           task.status !== 'Completed' && canManageTask(task)
                                             ? 'cursor-pointer'
@@ -1740,7 +1892,7 @@ export default function TasksPage({
                             <div className="flex items-center gap-1.5 min-w-0">
                               {task.assignedTo ? (
                                 <>
-                                  <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[8px] flex items-center justify-center shrink-0">
+                                  <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-accent to-accent-hover text-white font-bold text-[8px] flex items-center justify-center shrink-0">
                                     {task.assignedTo.slice(0, 2).toUpperCase()}
                                   </div>
                                   <span className="text-slate-300 truncate max-w-[80px]">
@@ -1756,14 +1908,14 @@ export default function TasksPage({
                             <div className="flex items-center gap-1.5 shrink-0">
                               {task.deadline && (
                                 <span className="text-slate-400 flex items-center gap-1 font-mono">
-                                  <Calendar className="w-2.5 h-2.5 text-purple-400" />
+                                  <Calendar className="w-2.5 h-2.5 text-accent-light" />
                                   {task.deadline}
                                 </span>
                               )}
                               <button
                                 type="button"
                                 onClick={() => setReviewingTask(task)}
-                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-accent-soft hover:bg-accent-soft text-accent-light border border-accent/30 transition-all cursor-pointer"
                               >
                                 Review
                               </button>
@@ -1795,6 +1947,7 @@ export default function TasksPage({
           }}
           onAddBug={onAddBug}
           onUpdateBug={onUpdateBug}
+          onOpenSubtaskModal={handleOpenSubtaskModal}
         />
       )}
 
@@ -1804,7 +1957,7 @@ export default function TasksPage({
           <div className="relative w-full max-w-md bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 shadow-2xl my-8">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white shadow-md shadow-accent/25">
                   <CheckSquare className="w-5 h-5" />
                 </div>
                 <div>
@@ -1822,15 +1975,15 @@ export default function TasksPage({
             </div>
 
             <div className="mt-4 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-              <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-accent-light shrink-0 mt-0.5" />
               <span>
                 <strong>Task creation:</strong> Tasks sync automatically across List and Board views and persist in browser storage.
               </span>
             </div>
 
             {formNotice && (
-              <div className="mt-3 p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <div className="mt-3 p-3 rounded-xl bg-accent-soft border border-accent/40 text-accent-light text-xs flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-accent-light shrink-0 mt-0.5" />
                 <span>{formNotice}</span>
               </div>
             )}
@@ -1839,7 +1992,7 @@ export default function TasksPage({
               {/* Task Title */}
               <div>
                 <label htmlFor="newTaskTitle" className="block text-xs font-medium text-slate-200 mb-1">
-                  Task Title <span className="text-purple-400">*</span>
+                  Task Title <span className="text-accent-light">*</span>
                 </label>
                 <input
                   id="newTaskTitle"
@@ -1848,21 +2001,21 @@ export default function TasksPage({
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   placeholder="e.g. Write technical specification"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80"
                 />
               </div>
 
               {/* Project Select */}
               <div>
                 <label htmlFor="newTaskProject" className="block text-xs font-medium text-slate-200 mb-1">
-                  Project <span className="text-purple-400">*</span>
+                  Project <span className="text-accent-light">*</span>
                 </label>
                 <select
                   id="newTaskProject"
                   required
                   value={taskForm.projectId}
                   onChange={(e) => setTaskForm({ ...taskForm, projectId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                 >
                   <option value="" disabled className="bg-[#0f173b]">Select a project</option>
                   {projects.map((p) => (
@@ -1885,7 +2038,7 @@ export default function TasksPage({
                     id="newTaskAssignee"
                     value={taskForm.assignedTo}
                     onChange={(e) => setTaskForm({ ...taskForm, assignedTo: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
                     <option value="" className="bg-[#0f173b]">— Unassigned —</option>
                     {teamMembers.map((m) => (
@@ -1907,7 +2060,7 @@ export default function TasksPage({
                     id="newTaskPriority"
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value as Task['priority'] })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p} className="bg-[#0f173b]">{p}</option>
@@ -1922,7 +2075,7 @@ export default function TasksPage({
                     id="newTaskStatus"
                     value={taskForm.status}
                     onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
                     {TASK_STATUSES.map((s) => (
                       <option key={s} value={s} className="bg-[#0f173b]">{s}</option>
@@ -1941,7 +2094,7 @@ export default function TasksPage({
                   type="date"
                   value={taskForm.deadline}
                   onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80"
                 />
               </div>
 
@@ -1955,7 +2108,7 @@ export default function TasksPage({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/30 transition-all cursor-pointer"
                 >
                   Create Task
                 </button>

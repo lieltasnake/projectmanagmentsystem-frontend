@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   FolderKanban,
   Search,
@@ -8,20 +8,22 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  AlertCircle,
   SlidersHorizontal,
   Layers,
   X,
-  Info,
   Briefcase,
   Users,
   ShieldCheck,
   Edit,
+  Trash2,
+  ChevronDown,
 } from 'lucide-react';
 import type { Project, TeamMember, UserRole } from '../types/pms';
-import { createProject, updateProject, deleteProject, getUsers, type ApiUser } from '../services/api';
+import { createProject, updateProject, deleteProject, getUsers, getProjectStatuses, type ApiUser } from '../services/api';
 
 export type { Project };
+
+
 
 interface ProjectsPageProps {
   projects?: Project[];
@@ -52,6 +54,32 @@ export default function ProjectsPage({
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isAddingStatus, setIsAddingStatus] = useState(false);
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusColor, setNewStatusColor] = useState('#6366f1');
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setIsStatusDropdownOpen(false);
+        setIsAddingStatus(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to top when modal opens to guarantee heading and top inputs are immediately visible
+  useEffect(() => {
+    if (isCreateModalOpen || isEditModalOpen) {
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTop = 0;
+      }
+    }
+  }, [isCreateModalOpen, isEditModalOpen]);
 
   // Real users fetched from the backend (source of truth for team assignment)
   const [availableUsers, setAvailableUsers] = useState<ApiUser[]>([]);
@@ -129,10 +157,16 @@ export default function ProjectsPage({
     description: '',
     startDate: '',
     deadline: '',
-    status: 'Planning' as Project['status'],
+    status: 'Not Started' as any,
     priority: 'Medium' as Project['priority'],
     teamLeaderId: '',
     teamMemberIds: [] as string[],
+    statuses: [
+      { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+      { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+      { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+      { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+    ] as { name: string; color: string | null; sortOrder: number; isCompletionStatus: boolean }[],
   });
 
   // State to show validation error or notice when user submits the form
@@ -162,32 +196,59 @@ export default function ProjectsPage({
       description: '',
       startDate: '',
       deadline: '',
-      status: 'Planning',
-      priority: 'Medium',
+      status: 'Not Started',
+      priority: formData.priority || 'Medium',
       teamLeaderId: '',
       teamMemberIds: [],
+      statuses: [
+        { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+        { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+        { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+        { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+      ],
     });
     setIsEditModalOpen(false);
     setIsCreateModalOpen(true);
-    // Fetch the latest available users when opening the creation form
     loadAvailableUsers();
   };
 
-  const handleEditOpen = (project: Project) => {
+  const handleEditOpen = async (project: Project) => {
     setFormError(null);
+    let projectStatuses = [
+      { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+      { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+      { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+      { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+    ];
+    try {
+      const res = await getProjectStatuses(project.id);
+      if (res && res.statuses && res.statuses.length > 0) {
+        projectStatuses = res.statuses.map((s, idx) => ({
+          name: s.name,
+          color: s.color || '#3b82f6',
+          sortOrder: s.sortOrder || idx + 1,
+          isCompletionStatus: Boolean(s.isCompletionStatus),
+        }));
+      }
+    } catch {
+      // Fallback to default
+    }
+
     setFormData({
       name: project.name,
-      description: project.description,
+      description: project.description || '',
       startDate: project.startDate,
       deadline: project.deadline,
       status: project.status,
-      priority: project.priority,
+      priority: project.priority || 'Medium',
       teamLeaderId: project.teamLeaderId || '',
       teamMemberIds: project.teamMemberIds || [],
+      statuses: projectStatuses,
     });
     setEditingProject(project);
     setIsCreateModalOpen(false);
     setIsEditModalOpen(true);
+    loadAvailableUsers();
   };
 
   const handleCloseModal = () => {
@@ -200,16 +261,44 @@ export default function ProjectsPage({
       description: '',
       startDate: '',
       deadline: '',
-      status: 'Planning',
+      status: 'Not Started',
       priority: 'Medium',
       teamLeaderId: '',
       teamMemberIds: [],
+      statuses: [
+        { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+        { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+        { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+        { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+      ],
     });
-    setIsEditModalOpen(false);
-    setEditingProject(null);
   };
 
-  // Toggle a team member in/out of the multi-select list
+
+
+  const handleRemoveStatus = (index: number) => {
+    setFormData((prev) => {
+      if (prev.statuses.length <= 1) return prev;
+      const target = prev.statuses[index];
+      const remaining = prev.statuses.filter((_, i) => i !== index);
+      // If we removed the completion status, designate the last status as completion
+      if (target.isCompletionStatus && remaining.length > 0) {
+        remaining[remaining.length - 1].isCompletionStatus = true;
+      }
+      return { ...prev, statuses: remaining };
+    });
+  };
+
+  const computeInitials = (name: string): string => {
+    return (
+      name
+        .split(/[\s._-]+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join('') || 'U'
+    );
+  };
+
   const handleDeleteProject = async (project: Project) => {
     if (currentUserRole !== 'Project Manager') return;
     const confirmed = window.confirm(
@@ -252,19 +341,52 @@ export default function ProjectsPage({
     e.preventDefault();
     setFormError(null);
 
-    // Validate required fields
-    if (!formData.name.trim() || !formData.startDate || !formData.deadline) {
-      setFormError('Please fill in all required fields.');
+    // 1. Validate required fields
+    if (!formData.name.trim()) {
+      setFormError('Please enter a Project Title.');
+      return;
+    }
+    if (!formData.startDate) {
+      setFormError('Please select a Start Date.');
+      return;
+    }
+    if (!formData.deadline) {
+      setFormError('Please select a Project Deadline.');
       return;
     }
 
-    // Validate deadline is not earlier than startDate
+    // 2. Validate deadline is not earlier than startDate
     if (new Date(formData.deadline) < new Date(formData.startDate)) {
       setFormError('Deadline cannot be earlier than the start date.');
       return;
     }
 
-    // Edit mode: update existing project via backend
+    // 3. Validate task statuses
+    if (formData.statuses.length === 0) {
+      setFormError('At least one task status is required for the project.');
+      return;
+    }
+
+    const hasEmptyStatus = formData.statuses.some((s) => !s.name.trim());
+    if (hasEmptyStatus) {
+      setFormError('Status names cannot be blank. Please provide a name for all statuses.');
+      return;
+    }
+
+    const lowerNames = formData.statuses.map((s) => s.name.trim().toLowerCase());
+    const duplicateName = lowerNames.find((name, idx) => lowerNames.indexOf(name) !== idx);
+    if (duplicateName) {
+      const originalName = formData.statuses.find((s) => s.name.trim().toLowerCase() === duplicateName)?.name || duplicateName;
+      setFormError(`Duplicate status name "${originalName}" is not allowed. Each status name must be unique.`);
+      return;
+    }
+
+    const completionCount = formData.statuses.filter((s) => s.isCompletionStatus).length;
+    if (completionCount !== 1) {
+      setFormError('Exactly one status must be designated as the Completion status.');
+      return;
+    }
+
     if (editingProject) {
       setIsCreating(true);
 
@@ -297,10 +419,16 @@ export default function ProjectsPage({
             description: '',
             startDate: '',
             deadline: '',
-            status: 'Planning',
+            status: 'Not Started',
             priority: 'Medium',
             teamLeaderId: '',
             teamMemberIds: [],
+            statuses: [
+              { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+              { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+              { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+              { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+            ],
           });
         } else {
           setFormError((updated as any).error || 'Failed to update project.');
@@ -328,6 +456,12 @@ export default function ProjectsPage({
         teamLeaderId: formData.teamLeaderId || undefined,
         teamMemberIds:
           formData.teamMemberIds.length > 0 ? [...formData.teamMemberIds] : undefined,
+        statuses: formData.statuses.map((s, idx) => ({
+          name: s.name.trim(),
+          color: s.color,
+          sortOrder: idx + 1,
+          isCompletionStatus: s.isCompletionStatus,
+        })),
       });
 
       if (created.success && created.project) {
@@ -341,12 +475,18 @@ export default function ProjectsPage({
           description: '',
           startDate: '',
           deadline: '',
-          status: 'Planning',
+          status: 'Not Started',
           priority: 'Medium',
           teamLeaderId: '',
-          teamMemberIds: [],
-        });
-        setIsCreateModalOpen(false);
+      teamMemberIds: [],
+      statuses: [
+        { name: 'Not Started', color: '#3b82f6', sortOrder: 1, isCompletionStatus: false },
+        { name: 'In Progress', color: '#6366f1', sortOrder: 2, isCompletionStatus: false },
+        { name: 'Under Review', color: '#f59e0b', sortOrder: 3, isCompletionStatus: false },
+        { name: 'Completed', color: '#10b981', sortOrder: 4, isCompletionStatus: true },
+      ],
+    });
+    setIsCreateModalOpen(false);
         setFormError(null);
       } else {
         setFormError((created as any).error || 'Failed to create project.');
@@ -402,7 +542,7 @@ export default function ProjectsPage({
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Projects
             </h2>
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-light border border-accent/30">
               {projects.length} {projects.length === 1 ? 'Project' : 'Projects'}
             </span>
           </div>
@@ -411,12 +551,12 @@ export default function ProjectsPage({
           </p>
         </div>
 
-        {/* Create Project Button — PM only */}
+        {/* Create Project Button â€” PM only */}
         {currentUserRole === 'Project Manager' && (
           <button
             type="button"
             onClick={handleOpenModal}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 active:scale-[0.99] transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-lg shadow-accent/25 active:scale-[0.99] transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Create Project</span>
@@ -427,7 +567,7 @@ export default function ProjectsPage({
       {/* 2. Empty State when no real projects exist */}
       {projects.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-10 sm:p-14 text-center flex flex-col items-center justify-center min-h-[380px]">
-          <div className="w-16 h-16 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4 shadow-lg shadow-purple-500/10">
+          <div className="w-16 h-16 rounded-2xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent-light mb-4 shadow-lg shadow-accent/10">
             <FolderKanban className="w-8 h-8" />
           </div>
           <h3 className="text-lg font-bold text-white">
@@ -440,7 +580,7 @@ export default function ProjectsPage({
             <button
               type="button"
               onClick={handleOpenModal}
-              className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-lg shadow-purple-600/20 cursor-pointer"
+              className="mt-6 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-accent hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create your first project</span>
@@ -459,7 +599,7 @@ export default function ProjectsPage({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by project name, description, or Project Manager..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80"
               />
             </div>
 
@@ -477,7 +617,7 @@ export default function ProjectsPage({
                   onClick={() => setStatusFilter(status)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
                     statusFilter === status
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                      ? 'bg-accent text-white shadow-md shadow-accent/20'
                       : 'bg-slate-900/60 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-700/60'
                   }`}
                 >
@@ -491,7 +631,7 @@ export default function ProjectsPage({
                   type="button"
                   onClick={() => setViewMode('card')}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                    viewMode === 'card' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+                    viewMode === 'card' ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   Cards
@@ -500,7 +640,7 @@ export default function ProjectsPage({
                   type="button"
                   onClick={() => setViewMode('table')}
                   className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                    viewMode === 'table' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'
+                    viewMode === 'table' ? 'bg-accent text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   Table
@@ -512,7 +652,7 @@ export default function ProjectsPage({
           {/* Filtered empty state */}
           {filteredProjects.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-12 text-center flex flex-col items-center justify-center min-h-[280px]">
-              <div className="w-12 h-12 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-3">
+              <div className="w-12 h-12 rounded-2xl bg-accent-soft border border-accent/20 flex items-center justify-center text-accent-light mb-3">
                 <FolderKanban className="w-6 h-6" />
               </div>
               <h3 className="text-base font-semibold text-white">No matching projects found</h3>
@@ -527,12 +667,12 @@ export default function ProjectsPage({
                 <div
                   key={project.id}
                   onClick={() => onSelectProject && onSelectProject(project)}
-                  className={`rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 hover:border-purple-500/50 shadow-xl p-5 flex flex-col justify-between transition-all duration-300 hover:shadow-purple-500/10 group ${onSelectProject ? 'cursor-pointer' : ''}`}
+                  className={`rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 hover:border-accent/50 shadow-xl p-5 flex flex-col justify-between transition-all duration-300 hover:shadow-accent/10 group ${onSelectProject ? 'cursor-pointer' : ''}`}
                 >
                   <div>
                     {/* Header: Status and Code */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="text-[11px] font-mono text-purple-300/80 px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20">
+                      <span className="text-[11px] font-mono text-accent-light/80 px-2 py-0.5 rounded-md bg-accent-soft border border-accent/20">
                         {project.id}
                       </span>
                       <div className="flex items-center gap-1">
@@ -543,7 +683,7 @@ export default function ProjectsPage({
                               e.stopPropagation();
                               handleEditOpen(project);
                             }}
-                            className="p-1 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+                            className="p-1 rounded-lg text-slate-400 hover:text-accent-light hover:bg-accent-soft transition-colors"
                             title="Edit Project"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -568,7 +708,7 @@ export default function ProjectsPage({
                     </div>
 
                     {/* Project Title & Description */}
-                    <h3 className="text-base font-bold text-white group-hover:text-purple-300 transition-colors line-clamp-1">
+                    <h3 className="text-base font-bold text-white group-hover:text-accent-light transition-colors line-clamp-1">
                       {project.name}
                     </h3>
                     <p className="mt-1.5 text-xs text-slate-300 line-clamp-2 leading-relaxed">
@@ -578,15 +718,15 @@ export default function ProjectsPage({
                     {/* Project Manager Details */}
                     <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-semibold text-xs flex items-center justify-center shadow-md shadow-purple-500/20 ring-1 ring-purple-500/30">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-semibold text-xs flex items-center justify-center shadow-md shadow-accent/20 ring-1 ring-accent/30">
                           {project.manager.avatarInitials}
                         </div>
                         <div>
                           <div className="text-xs font-semibold text-white">
                             {project.manager.name}
                           </div>
-                          <div className="text-[10px] text-purple-300 flex items-center gap-1">
-                            <UserCheck className="w-3 h-3 text-purple-400" />
+                          <div className="text-[10px] text-accent-light flex items-center gap-1">
+                            <UserCheck className="w-3 h-3 text-accent-light" />
                             <span>Responsible PM</span>
                           </div>
                         </div>
@@ -655,7 +795,7 @@ export default function ProjectsPage({
                         className={`h-full rounded-full transition-all duration-500 ${
                           project.progress === 100
                             ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                            : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                            : 'bg-gradient-to-r from-accent to-accent-hover'
                         }`}
                         style={{ width: `${project.progress}%` }}
                       />
@@ -699,7 +839,7 @@ export default function ProjectsPage({
                         {/* Project Name & Description */}
                         <td className="px-5 py-4 max-w-xs">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-purple-300/80 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                            <span className="text-[10px] font-mono text-accent-light/80 px-1.5 py-0.5 rounded bg-accent-soft border border-accent/20">
                               {project.id}
                             </span>
                             <div className="font-bold text-white text-sm">{project.name}</div>
@@ -712,12 +852,12 @@ export default function ProjectsPage({
                         {/* Responsible PM */}
                         <td className="px-5 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-semibold text-[10px] flex items-center justify-center">
+                            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-semibold text-[10px] flex items-center justify-center">
                               {project.manager.avatarInitials}
                             </div>
                             <div>
                               <div className="font-semibold text-white">{project.manager.name}</div>
-                              <div className="text-[10px] text-purple-300">Responsible PM</div>
+                              <div className="text-[10px] text-accent-light">Responsible PM</div>
                             </div>
                           </div>
                         </td>
@@ -728,7 +868,7 @@ export default function ProjectsPage({
                             {project.teamLeaderId ? (
                               <div className="flex items-center gap-1">
                                 <ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
-                                <span className="text-indigo-300">{userLookup.get(String(project.teamLeaderId))?.name ?? '—'}</span>
+                                <span className="text-indigo-300">{userLookup.get(String(project.teamLeaderId))?.name ?? 'â€”'}</span>
                               </div>
                             ) : <span className="text-slate-600 italic">No TL</span>}
                             {project.teamMemberIds && project.teamMemberIds.length > 0 && (
@@ -768,7 +908,7 @@ export default function ProjectsPage({
                               className={`h-full rounded-full ${
                                 project.progress === 100
                                   ? 'bg-emerald-400'
-                                  : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                  : 'bg-gradient-to-r from-accent to-accent-hover'
                               }`}
                               style={{ width: `${project.progress}%` }}
                             />
@@ -785,14 +925,14 @@ export default function ProjectsPage({
                                   e.stopPropagation();
                                   handleEditOpen(project);
                                 }}
-                                className="p-1 rounded-lg text-slate-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors"
+className="p-1 rounded-lg text-slate-400 hover:text-accent-light hover:bg-accent-soft transition-colors"
                                 title="Edit Project"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                             )}
                             <span className="text-[11px] text-purple-400 font-medium">
-                              View →
+                              View â†’
                             </span>
                             {currentUserRole === 'Project Manager' && (
                               <button
@@ -820,222 +960,440 @@ export default function ProjectsPage({
         </>
       )}
 
-      {/* 3. "Create Project" Form Modal */}
+            {/* Modern, Compact Create / Edit Project Modal */}
       {(isCreateModalOpen || isEditModalOpen) && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 sm:p-7 shadow-2xl my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseModal();
+          }}
+        >
+          <div
+            className="relative w-full max-w-lg sm:max-w-xl bg-[#0f172a] border border-slate-800 rounded-2xl shadow-2xl flex flex-col my-auto overflow-hidden max-h-[90vh] animate-in fade-in zoom-in-95 duration-150"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-project-title"
+          >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/60 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25">
-                  <Briefcase className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent-light shrink-0">
+                  <Briefcase className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white leading-tight">
+                  <h3 id="create-project-title" className="text-base sm:text-lg font-bold text-white leading-tight">
                     {editingProject ? 'Edit Project' : 'Create New Project'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    {editingProject
-                      ? 'Update the project details below'
-                      : 'Fill in the project details below'}
+                    {editingProject ? 'Update project settings and assignments' : 'Define project details, schedule, and team'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleCloseModal}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 aria-label="Close modal"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Architecture / Status Notice */}
-            <div className="mt-4 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-              <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <span>
-                <strong>Create Project:</strong> Assign a Team Leader and Team Members from registered workspace users. Assignments are saved and visible after refresh.
-              </span>
-            </div>
-
-            {/* Validation Error Banner */}
-            {formError && (
-              <div className="mt-3 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            {/* Project Creation Form */}
-            <form onSubmit={handleFormSubmit} className="mt-4 space-y-4">
-              {/* Project Name */}
-              <div>
-                <label htmlFor="projectName" className="block text-xs font-medium text-slate-200 mb-1">
-                  Project Name <span className="text-purple-400">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
-                    <FolderKanban className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="projectName"
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g. Enterprise Cloud Platform"
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
-                  />
+            {/* Scrollable Form Body */}
+            <div ref={modalScrollRef} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              {/* Validation Error Banner */}
+              {formError && (
+                <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-start gap-2.5 shadow-sm">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span className="font-medium leading-relaxed">{formError}</span>
                 </div>
-              </div>
+              )}
 
-              {/* Description */}
-              <div>
-                <label htmlFor="projectDescription" className="block text-xs font-medium text-slate-200 mb-1">
-                  Description
-                </label>
-                <div className="relative">
-                  <textarea
-                    id="projectDescription"
-                    rows={3}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of the project objectives and scope..."
-                    className="w-full p-3 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80 resize-none"
-                  />
+              <form id="create-project-form" onSubmit={handleFormSubmit} className="space-y-5">
+                {/* Project Details */}
+                <div className="space-y-3.5">
+                  <div>
+                    <label htmlFor="projectName" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Project Title <span className="text-accent-light">*</span>
+                    </label>
+                    <input
+                      id="projectName"
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g. Website Redesign, Mobile App..."
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80 focus:border-accent transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="projectDescription" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Description
+                    </label>
+                    <textarea
+                      id="projectDescription"
+                      rows={2}
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Add a brief description of project goals and scope..."
+                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80 focus:border-accent transition-all resize-none"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Responsible Project Manager — auto-filled from logged-in user */}
-              <div>
-                <label className="block text-xs font-medium text-slate-200 mb-1">
-                  Responsible Project Manager
-                </label>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-700/60 text-sm text-slate-200">
-                  <UserCheck className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>{currentUserName || 'Current User (PM)'}</span>
-                  <span className="ml-auto text-[10px] text-purple-300 font-medium">Auto-assigned</span>
-                </div>
-              </div>
-
-              {/* Assign Team Leader */}
-              <div>
-                <label htmlFor="assignTL" className="block text-xs font-medium text-slate-200 mb-1">
-                  Assign Team Leader
-                </label>
-                {usersLoading ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-slate-700/60 text-xs text-slate-400 italic">
-                    Loading available users...
-                  </div>
-                ) : usersError ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-300">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{usersError}</span>
-                  </div>
-                ) : registeredTLs.length === 0 ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    No active Team Leaders available. Create one in the Team page first.
-                  </div>
-                ) : (
-                  <select
-                    id="assignTL"
-                    value={formData.teamLeaderId}
-                    onChange={(e) => setFormData({ ...formData, teamLeaderId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
-                  >
-                    <option value="" className="bg-[#0f173b]">— None (assign later) —</option>
-                    {registeredTLs.map((tl) => (
-                      <option key={tl.id} value={tl.id} className="bg-[#0f173b]">
-                        {tl.name}{tl.skills && tl.skills.length > 0 ? ` — Skills: ${tl.skills.join(', ')}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Assign Team Members */}
-              <div>
-                <label className="block text-xs font-medium text-slate-200 mb-1">
-                  Assign Team Members
-                  {formData.teamMemberIds.length > 0 && (
-                    <span className="ml-2 text-[10px] text-emerald-300 font-normal">
-                      ({formData.teamMemberIds.length} selected)
-                    </span>
-                  )}
-                </label>
-                {usersLoading ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-900/50 border border-slate-700/60 text-xs text-slate-400 italic">
-                    Loading available users...
-                  </div>
-                ) : usersError ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-xs text-red-300">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{usersError}</span>
-                  </div>
-                ) : registeredTMs.length === 0 ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/30 text-xs text-amber-300">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    No active Team Members available. Create Team Members in the Team page first.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {/* Skill search / filter */}
+                {/* Timeline, Priority & Status */}
+                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-[10px] font-medium text-slate-400 mb-1">
-                        Search by name, email, or skill
+                      <label htmlFor="startDate" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Start Date <span className="text-accent-light">*</span>
                       </label>
                       <input
-                        id="skillFilter"
-                        value={skillFilter}
-                        onChange={(e) => setSkillFilter(e.target.value)}
-                        placeholder="e.g. React, TypeScript, PostgreSQL..."
-                        className="w-full px-2.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                        id="startDate"
+                        type="date"
+                        required
+                        value={formData.startDate}
+                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                       />
                     </div>
-                    <div className="rounded-xl bg-slate-900/80 border border-slate-700/80 max-h-40 overflow-y-auto divide-y divide-slate-800/60">
-                      {filteredTMs.length === 0 && skillFilter.trim() !== '' ? (
-                        <div className="p-3 text-center text-xs text-slate-400 italic">
-                          No Team Members match the selected skill.
+
+                    <div>
+                      <label htmlFor="deadline" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Deadline <span className="text-accent-light">*</span>
+                      </label>
+                      <input
+                        id="deadline"
+                        type="date"
+                        required
+                        value={formData.deadline}
+                        onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="projectPriority" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Priority
+                      </label>
+                      <select
+                        id="projectPriority"
+                        value={formData.priority}
+                        onChange={(e) => setFormData({ ...formData, priority: e.target.value as Project['priority'] })}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
+                      >
+                        <option value="High" className="bg-[#0f172a]">High Priority</option>
+                        <option value="Medium" className="bg-[#0f172a]">Medium Priority</option>
+                        <option value="Low" className="bg-[#0f172a]">Low Priority</option>
+                      </select>
+                    </div>
+
+                    {/* Initial Project Status Dropdown with + Add Status */}
+                    <div className="relative" ref={statusDropdownRef}>
+                      <label htmlFor="projectStatus" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Initial Project Status
+                      </label>
+<button
+                        type="button"
+                        id="projectStatus"
+                        onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-accent/80 transition-all cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{
+                              backgroundColor:
+                                formData.statuses.find(
+                                  (s) => s.name.toLowerCase() === (formData.status || '').toLowerCase()
+                                )?.color || '#3b82f6',
+                            }}
+                          />
+                          <span className="truncate">
+                            {formData.status || 'Not Started'}
+                          </span>
                         </div>
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${
+                            isStatusDropdownOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isStatusDropdownOpen && (
+                        <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-1.5 w-full sm:w-72 rounded-xl bg-[#0b1120] border border-slate-700/90 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                          {/* Status Options List */}
+                          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                            {formData.statuses.map((status, idx) => {
+                              const isSelected =
+                                (formData.status || '').toLowerCase() === status.name.toLowerCase();
+                              return (
+                                <div
+                                  key={idx}
+                                  onClick={() => {
+                                    setFormData({ ...formData, status: status.name as any });
+                                    setIsStatusDropdownOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                    isSelected
+                                      ? 'bg-purple-600/30 text-white font-semibold border border-purple-500/40'
+                                      : 'text-slate-300 hover:bg-slate-800/80 border border-transparent'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                                      style={{ backgroundColor: status.color || '#3b82f6' }}
+                                    />
+                                    <span className="truncate">{status.name}</span>
+                                    {status.isCompletionStatus && (
+                                      <span className="text-[9px] text-emerald-400 font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                                        Done
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Delete custom status if not completion and length > 1 */}
+                                  {formData.statuses.length > 1 && !status.isCompletionStatus && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveStatus(idx);
+                                      }}
+                                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors ml-1 shrink-0"
+                                      title="Remove status"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* + Add Status button / inline input */}
+                          <div className="border-t border-slate-800/80 pt-1.5 mt-1.5">
+                            {isAddingStatus ? (
+                              <div className="p-2 space-y-2 bg-slate-900 rounded-lg border border-slate-700/80">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={newStatusColor}
+                                    onChange={(e) => setNewStatusColor(e.target.value)}
+                                    className="w-5 h-5 rounded border-0 bg-transparent cursor-pointer p-0 shrink-0"
+                                    title="Pick color"
+                                  />
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={newStatusName}
+                                    onChange={(e) => setNewStatusName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const trimmed = newStatusName.trim();
+                                        if (!trimmed) return;
+                                        if (
+                                          formData.statuses.some(
+                                            (s) => s.name.toLowerCase() === trimmed.toLowerCase()
+                                          )
+                                        ) {
+                                          setFormError(`Status "${trimmed}" already exists.`);
+                                          return;
+                                        }
+                                        const newS = {
+                                          name: trimmed,
+                                          color: newStatusColor || '#6366f1',
+                                          sortOrder: formData.statuses.length + 1,
+                                          isCompletionStatus: false,
+                                        };
+                                        // Append to status list without changing currently selected status at top
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          statuses: [...prev.statuses, newS],
+                                        }));
+                                        setNewStatusName('');
+                                        setIsAddingStatus(false);
+                                      }
+                                    }}
+                                    placeholder="Status name..."
+                                    className="flex-1 min-w-0 px-2 py-1 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-accent"
+                                  />
+                                </div>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsAddingStatus(false);
+                                      setNewStatusName('');
+                                    }}
+                                    className="px-2 py-0.5 rounded text-[11px] text-slate-400 hover:text-white"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const trimmed = newStatusName.trim();
+                                      if (!trimmed) return;
+                                      if (
+                                        formData.statuses.some(
+                                          (s) => s.name.toLowerCase() === trimmed.toLowerCase()
+                                        )
+                                      ) {
+                                        setFormError(`Status "${trimmed}" already exists.`);
+                                        return;
+                                      }
+                                      const newS = {
+                                        name: trimmed,
+                                        color: newStatusColor || '#6366f1',
+                                        sortOrder: formData.statuses.length + 1,
+                                        isCompletionStatus: false,
+                                      };
+                                      // Append without changing selected status at top
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        statuses: [...prev.statuses, newS],
+                                      }));
+                                      setNewStatusName('');
+                                      setIsAddingStatus(false);
+                                    }}
+                                    className="px-2.5 py-0.5 rounded bg-accent hover:bg-accent-hover text-white text-[11px] font-semibold"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsAddingStatus(true);
+                                  setNewStatusName('');
+                                  setNewStatusColor('#6366f1');
+                                }}
+                                className="w-full py-1 px-2.5 rounded-lg border border-dashed border-accent/30 hover:border-accent/70 bg-accent-soft hover:bg-accent/10 text-accent-light text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-accent-light" />
+                                <span>Add Status</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Team Leadership & Assignments */}
+                <div className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    {/* Project Manager */}
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-accent text-white font-bold text-xs flex items-center justify-center shrink-0">
+                          {computeInitials(currentUserName || 'PM')}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-white truncate">{currentUserName || 'Current User'}</div>
+                          <div className="text-[10px] text-slate-400">Project Manager</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
+                        Owner
+                      </span>
+                    </div>
+
+                    {/* Team Leader */}
+                    <div>
+                      {usersLoading ? (
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                          Loading Team Leaders...
+                        </div>
+                      ) : usersError ? (
+                        <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-500/30 text-xs text-red-300">
+                          {usersError}
+                        </div>
+                      ) : registeredTLs.length === 0 ? (
+                        <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                          No Team Leaders available
+                        </div>
+                      ) : (
+                        <select
+                          id="assignTL"
+                          value={formData.teamLeaderId}
+                          onChange={(e) => setFormData({ ...formData, teamLeaderId: e.target.value })}
+                          className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                        >
+                          <option value="" className="bg-[#0f172a]">-- Assign Team Leader --</option>
+                          {registeredTLs.map((tl) => (
+                            <option key={tl.id} value={tl.id} className="bg-[#0f172a]">
+                              {tl.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Team Members Selection */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-300">
+                        Team Members
+                      </label>
+                      <span className="text-[11px] font-medium text-accent-light bg-accent-soft px-2 py-0.5 rounded-full border border-accent/20">
+                        {formData.teamMemberIds.length} selected
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                        <Search className="w-3.5 h-3.5" />
+                      </div>
+                      <input
+                        value={skillFilter}
+                        onChange={(e) => setSkillFilter(e.target.value)}
+                        placeholder="Search members by name or skill..."
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/70 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/70"
+                      />
+                    </div>
+
+                    <div className="rounded-xl bg-slate-900/80 border border-slate-800 max-h-36 overflow-y-auto divide-y divide-slate-800/60 shadow-inner">
+                      {usersLoading ? (
+                        <div className="p-3 text-center text-xs text-slate-400">Loading members...</div>
+                      ) : registeredTMs.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-slate-400">No members found.</div>
+                      ) : filteredTMs.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-slate-400">No members match search.</div>
                       ) : (
                         filteredTMs.map((tm) => {
                           const selected = formData.teamMemberIds.includes(String(tm.id));
                           return (
-                            <label
+<label
                               key={tm.id}
-                              className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
-                                selected ? 'bg-emerald-500/10' : 'hover:bg-slate-800/60'
+                              className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${
+                                selected ? 'bg-accent-soft' : 'hover:bg-slate-800/40'
                               }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={selected}
                                 onChange={() => handleToggleMember(String(tm.id))}
-                                className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
+                                className="accent-purple-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer"
                               />
-                          <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                            {tm.name
-                              .split(/[\s._-]+/)
-                              .slice(0, 2)
-                              .map((s) => s.charAt(0).toUpperCase())
-                              .join('') || 'U'}
-                          </div>
-                              <div className="min-w-0">
-                                <div className="text-xs font-medium text-white truncate">{tm.name}</div>
-                                <div className="text-[10px] text-slate-400 truncate">{tm.role || ''}</div>
+                              <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                                {computeInitials(tm.name)}
+                              </div>
+                              <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                                <span className="text-xs text-slate-200 truncate">{tm.name}</span>
                                 {tm.skills && tm.skills.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {tm.skills.map((skill) => (
-                                      <span
-                                        key={skill}
-                                        className="px-1.5 py-0.5 rounded bg-slate-800/80 border border-slate-700/60 text-[9px] text-purple-300"
-                                      >
-                                        {skill}
-                                      </span>
-                                    ))}
-                                  </div>
+                                  <span className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                                    {tm.skills.slice(0, 2).join(', ')}
+                                  </span>
                                 )}
                               </div>
                             </label>
@@ -1043,89 +1401,40 @@ export default function ProjectsPage({
                         })
                       )}
                     </div>
-                    {filteredTMs.length === 0 && skillFilter.trim() === '' && (
-                      <div className="p-2 text-center text-xs text-slate-500 italic">
-                        No eligible Team Members available.
-                      </div>
-                    )}
                   </div>
+                </div>
+              </form>
+            </div>
+
+            {/* Modal Footer (Clean & Professional) */}
+            <div className="px-6 py-3.5 border-t border-slate-800 bg-slate-900/80 backdrop-blur-md flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="create-project-form"
+                disabled={isCreating}
+                className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/25 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>{editingProject ? 'Saving...' : 'Creating...'}</span>
+                  </>
+                ) : (
+                  <span>{editingProject ? 'Save Changes' : 'Create Project'}</span>
                 )}
-              </div>
-
-              {/* Dates Grid: Start Date & Deadline */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="startDate" className="block text-xs font-medium text-slate-200 mb-1">
-                    Start Date <span className="text-purple-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="startDate"
-                      type="date"
-                      required
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="deadline" className="block text-xs font-medium text-slate-200 mb-1">
-                    Deadline <span className="text-purple-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="deadline"
-                      type="date"
-                      required
-                      value={formData.deadline}
-                      onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Select */}
-              <div>
-                <label htmlFor="projectStatus" className="block text-xs font-medium text-slate-200 mb-1">
-                  Status
-                </label>
-                <select
-                  id="projectStatus"
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value as Project['status'] })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
-                >
-                  <option value="Planning" className="bg-[#0f173b]">Planning</option>
-                  <option value="In Progress" className="bg-[#0f173b]">In Progress</option>
-                  <option value="On Hold" className="bg-[#0f173b]">On Hold</option>
-                  <option value="Completed" className="bg-[#0f173b]">Completed (PM Approved)</option>
-                </select>
-              </div>
-
-              {/* Modal Buttons */}
-              <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingProject ? 'Save Changes' : isCreating ? 'Creating...' : 'Create Project'}
-                </button>
-              </div>
-            </form>
+              </button>
+            </div>
           </div>
         </div>
       )}
+
 
       {toast && (
         <div

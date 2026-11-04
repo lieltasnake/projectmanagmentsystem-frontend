@@ -1,4 +1,4 @@
-import type { Project, UserRole } from '../types/pms';
+﻿import type { Project, UserRole } from '../types/pms';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api';
 const TOKEN_KEY = 'pms_auth_token';
@@ -252,6 +252,7 @@ export interface CreateProjectData {
   priority?: string;
   teamLeaderId?: string;
   teamMemberIds?: string[];
+  statuses?: { name: string; color?: string | null; sortOrder?: number; isCompletionStatus?: boolean }[];
 }
 
 export interface UpdateProjectData {
@@ -280,6 +281,42 @@ export interface ProjectTeamResponse {
   success: boolean;
   count: number;
   teamMembers: ProjectTeamMember[];
+}
+
+export interface ProjectStatus {
+  id: string;
+  projectId: string;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+  isCompletionStatus: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectStatusData {
+  name: string;
+  color?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateProjectStatusData {
+  name?: string;
+  color?: string | null;
+  sortOrder?: number;
+}
+
+export interface ProjectStatusResponse {
+  success: boolean;
+  count: number;
+  statuses: ProjectStatus[];
+}
+
+export interface ProjectStatusResult {
+  success: boolean;
+  message: string;
+  status: ProjectStatus;
 }
 
 export async function getProjects(filters?: ProjectFilters): Promise<{
@@ -352,7 +389,8 @@ export async function getProjectTasks(projectId: string | number): Promise<{
     projectId: string;
     title: string;
     description: string;
-    status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+    status: string;
+    statusId: string | null;
     priority: 'High' | 'Medium' | 'Low' | 'Urgent';
     assignedToId: string | null;
     deadline: string | null;
@@ -367,7 +405,8 @@ export async function getProjectTasks(projectId: string | number): Promise<{
       projectId: string;
       title: string;
       description: string;
-      status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+      status: string;
+      statusId: string | null;
       priority: 'High' | 'Medium' | 'Low' | 'Urgent';
       assignedToId: string | null;
       deadline: string | null;
@@ -386,6 +425,8 @@ export async function createProjectTask(
     assignedToId?: string | number | null;
     priority?: 'High' | 'Medium' | 'Low' | 'Urgent';
     deadline?: string;
+    status?: string;
+    statusId?: string | number | null;
   }
 ): Promise<{
   success: boolean;
@@ -395,7 +436,8 @@ export async function createProjectTask(
     projectId: string;
     title: string;
     description: string;
-    status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+    status: string;
+    statusId: string | null;
     priority: 'High' | 'Medium' | 'Low' | 'Urgent';
     assignedToId: string | null;
     deadline: string | null;
@@ -418,7 +460,8 @@ export async function createProjectTask(
       projectId: string;
       title: string;
       description: string;
-      status: 'Not Started' | 'In Progress' | 'Under Review' | 'Completed';
+      status: string;
+      statusId: string | null;
       priority: 'High' | 'Medium' | 'Low' | 'Urgent';
       assignedToId: string | null;
       deadline: string | null;
@@ -432,6 +475,8 @@ export async function createProjectTask(
       assignedToId: taskData.assignedToId || undefined,
       priority: backendPriority,
       deadline: taskData.deadline || undefined,
+      status: taskData.status || undefined,
+      statusId: taskData.statusId || undefined,
     }),
   });
 }
@@ -466,6 +511,75 @@ export async function removeProjectTeamMember(
   return request<{ success: boolean; message: string }>(`/projects/${id}/team/${userId}`, {
     method: 'DELETE',
   });
+}
+
+// =========================================================================
+// Project Task Status Endpoints
+// =========================================================================
+
+export async function getProjectStatuses(
+  projectId: string | number
+): Promise<ProjectStatusResponse> {
+  return request<ProjectStatusResponse>(`/projects/${projectId}/statuses`, {
+    method: 'GET',
+  });
+}
+
+export async function createProjectStatus(
+  projectId: string | number,
+  data: CreateProjectStatusData
+): Promise<ProjectStatusResult> {
+  return request<ProjectStatusResult>(`/projects/${projectId}/statuses`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: data.name,
+      color: data.color ?? null,
+      sortOrder: data.sortOrder ?? 0,
+    }),
+  });
+}
+
+export async function updateProjectStatus(
+  projectId: string | number,
+  statusId: string | number,
+  data: UpdateProjectStatusData
+): Promise<ProjectStatusResult> {
+  return request<ProjectStatusResult>(`/projects/${projectId}/statuses/${statusId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      name: data.name,
+      color: data.color ?? null,
+      sortOrder: data.sortOrder ?? 0,
+    }),
+  });
+}
+
+export async function deleteProjectStatus(
+  projectId: string | number,
+  statusId: string | number,
+  replacementStatusId?: string | number
+): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(
+    `/projects/${projectId}/statuses/${statusId}`,
+    {
+      method: 'DELETE',
+      body: replacementStatusId !== undefined
+        ? JSON.stringify({ replacementStatusId })
+        : undefined,
+    }
+  );
+}
+
+export async function designateCompletionStatus(
+  projectId: string | number,
+  statusId: string | number
+): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(
+    `/projects/${projectId}/statuses/${statusId}/completion`,
+    {
+      method: 'PATCH',
+    }
+  );
 }
 
 // =========================================================================
@@ -660,4 +774,68 @@ export async function deleteTaskAttachment(taskId: string | number, attachmentId
 export function getTaskAttachmentDownloadUrl(taskId: string | number, attachmentId: string | number): string {
   return `${API_BASE_URL}/tasks/${taskId}/attachments/${attachmentId}/download`;
 }
+
+
+// =========================================================================
+// Roles & Skills Catalog Endpoints (All authenticated users)
+// =========================================================================
+
+export interface RoleCatalog {
+  id: number;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SkillCatalog {
+  id: number;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function getRoles(): Promise<{ success: boolean; count: number; roles: RoleCatalog[] }> {
+  return request<{ success: boolean; count: number; roles: RoleCatalog[] }>('/users/roles', {
+    method: 'GET',
+  });
+}
+
+export async function createRole(data: { name: string; description?: string }): Promise<{ success: boolean; message: string; role: RoleCatalog }> {
+  return request<{ success: boolean; message: string; role: RoleCatalog }>('/users/roles', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRole(id: number | string, data: { name: string; description?: string }): Promise<{ success: boolean; message: string; role: RoleCatalog }> {
+  return request<{ success: boolean; message: string; role: RoleCatalog }>(`/users/roles/` + id, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getSkills(): Promise<{ success: boolean; count: number; skills: SkillCatalog[] }> {
+  return request<{ success: boolean; count: number; skills: SkillCatalog[] }>('/users/skills', {
+    method: 'GET',
+  });
+}
+
+export async function createSkill(data: { name: string; description?: string }): Promise<{ success: boolean; message: string; skill: SkillCatalog }> {
+  return request<{ success: boolean; message: string; skill: SkillCatalog }>('/users/skills', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateSkill(id: number | string, data: { name: string; description?: string }): Promise<{ success: boolean; message: string; skill: SkillCatalog }> {
+  return request<{ success: boolean; message: string; skill: SkillCatalog }>(`/users/skills/` + id, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 

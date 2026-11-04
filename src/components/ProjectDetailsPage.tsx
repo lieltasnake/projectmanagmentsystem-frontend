@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   ArrowLeft,
   Calendar,
@@ -27,9 +27,10 @@ import {
   GripVertical,
   AlertCircle,
 } from 'lucide-react';
-import type { Project, Task, TeamMember, Bug } from '../types/pms';
+import type { Project, Task, TeamMember, Bug, ProjectStatus } from '../types/pms';
 import TaskReviewModal, { type UserRole } from './TaskReviewModal';
 import { useProjectTeam } from '../hooks/useProjectTeam';
+import { getProjectStatuses, approveTask } from '../services/api';
 
 interface ProjectDetailsPageProps {
   project: Project;
@@ -48,7 +49,6 @@ interface ProjectDetailsPageProps {
 
 type TabId = 'overview' | 'tasks' | 'team';
 
-const TASK_STATUSES: Task['status'][] = ['Not Started', 'In Progress', 'Under Review', 'Completed'];
 const PRIORITIES: Task['priority'][] = ['High', 'Medium', 'Low'];
 
 function getStatusBadge(status: Project['status']) {
@@ -69,7 +69,7 @@ function getStatusBadge(status: Project['status']) {
       );
     case 'Planning':
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-soft text-accent-light border border-accent/30">
           <Layers className="w-3.5 h-3.5" />
           Planning
         </span>
@@ -86,7 +86,33 @@ function getStatusBadge(status: Project['status']) {
   }
 }
 
-function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRecommendation']) {
+function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRecommendation'], isLegacyDone = false) {
+  // Legacy/Unapproved DONE badge: never displayed as Completed.
+  if (isLegacyDone) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-900/20 text-rose-400 border border-rose-500/30">
+        <AlertTriangle className="w-3 h-3" />
+        Legacy/Unapproved DONE
+      </span>
+    );
+  }
+
+  // Generic badge for custom/dynamic statuses not covered by the hardcoded switch.
+  const knownStatuses = ['Completed', 'In Progress', 'Under Review', 'Not Started'];
+  if (!knownStatuses.includes(status)) {
+    const cfg = {
+      label: status,
+      badgeBg: 'bg-slate-700/30 text-slate-300 border-slate-600/40',
+      border: 'border-slate-700/80',
+      dot: 'bg-slate-400',
+    };
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.badgeBg} border ${cfg.border}`}>
+        <span className={`w-3 h-3 rounded-full ${cfg.dot}`} />
+        {status}
+      </span>
+    );
+  }
   switch (status) {
     case 'Completed':
       return (
@@ -113,7 +139,7 @@ function getTaskStatusBadge(status: Task['status'], recommendation?: Task['tlRec
     case 'Under Review':
       if (recommendation === 'recommended') {
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent-soft text-accent-light border border-accent/30">
             <ShieldCheck className="w-3 h-3" />
             TL Recommended
           </span>
@@ -195,8 +221,44 @@ export default function ProjectDetailsPage({
   const [taskFormNotice, setTaskFormNotice] = useState<string | null>(null);
   const [taskViewMode, setTaskViewMode] = useState<'list' | 'board'>('list');
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<Task['status'] | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+
+  // Dynamic project-specific statuses
+  const [projectStatuses, setProjectStatuses] = useState<ProjectStatus[]>([]);
+
+  const effectiveStatuses = useMemo(() => {
+    if (projectStatuses.length > 0) {
+      return projectStatuses.map((s) => s.name);
+    }
+    return ['Not Started', 'In Progress', 'Under Review', 'Completed'];
+  }, [projectStatuses]);
+
+  const completionStatusMemo = useMemo(() => {
+    return projectStatuses.find((s) => s.isCompletionStatus);
+  }, [projectStatuses]);
+
+  const completionName = completionStatusMemo ? completionStatusMemo.name : 'Completed';
+
+  const isLegacyUnapprovedDone = useCallback((task: Task): boolean => {
+    const completionStatus = projectStatuses.find((s) => s.isCompletionStatus);
+    return (
+      (task as any).statusId === null &&
+      task.status === (completionStatus ? completionStatus.name : 'Completed')
+    );
+  }, [projectStatuses]);
+
+  // Load statuses for the current project
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getProjectStatuses(project.id);
+        setProjectStatuses(res.statuses || []);
+      } catch {
+        setProjectStatuses([]);
+      }
+    })();
+  }, [project.id]);
 
   const handleOpenTaskModal = () => {
     const r = String(currentUserRole || '').toUpperCase().replace(/[\s_-]+/g, '');
@@ -246,8 +308,11 @@ export default function ProjectDetailsPage({
       targetTask.assignedTo.trim().toLowerCase() === currentUserName.trim().toLowerCase()
     );
 
+    const completionStatus = projectStatuses.find((s) => s.isCompletionStatus);
+    const currentCompletionName = completionStatus ? completionStatus.name : 'Completed';
+
     const canManage =
-      targetTask.status !== 'Completed' &&
+      targetTask.status !== currentCompletionName &&
       (isProjectManager || isTeamLeader || (isTeamMember && isAssigned));
 
     if (!canManage) return;
@@ -267,10 +332,10 @@ export default function ProjectDetailsPage({
     onUpdateTask(updatedTask);
   };
 
-  const handleStatusChange = (task: Task, newStatus: Task['status']) => {
+  const handleStatusChange = async (task: Task, newStatus: string) => {
     if (task.status === newStatus || !onUpdateTask) return;
 
-    if (newStatus === 'Completed' && currentUserRole !== 'Project Manager') {
+    if (newStatus === completionName && currentUserRole !== 'Project Manager') {
       setPermissionNotice(
         'Permission Denied: Only the Project Manager can approve a task as Completed. Team Members must submit tasks for review.'
       );
@@ -284,7 +349,7 @@ export default function ProjectDetailsPage({
     );
 
     const canManage =
-      task.status !== 'Completed' &&
+      task.status !== completionName &&
       (currentUserRole === 'Project Manager' ||
         currentUserRole === 'Team Leader' ||
         (currentUserRole === 'Team Member' && isAssigned));
@@ -295,26 +360,36 @@ export default function ProjectDetailsPage({
       return;
     }
 
-    const history = [...(task.reviewHistory || [])];
-    let feedback = task.reviewFeedback;
-
-    if (newStatus === 'Completed' && currentUserRole === 'Project Manager') {
-      history.unshift({
-        id: `rev-${Date.now()}`,
-        authorRole: currentUserRole,
-        authorName: currentUserName,
-        action: 'final_approve',
-        comment: 'Task approved and completed via Project Board.',
-        timestamp: new Date().toLocaleString(),
-      });
-      feedback = `[Approved by PM ${currentUserName}]: Officially completed.`;
+    // PM completing a task via the completion status must use the backend
+    // approval endpoint. Never create a local final_approve review record
+    // as a substitute for backend approval.
+    if (newStatus === completionName && currentUserRole === 'Project Manager') {
+      try {
+        const res = await approveTask(task.id);
+        if (res.success) {
+          // Backend approval succeeded. Refresh local task state from the
+          // backend's approval decision.
+          onUpdateTask({
+            ...task,
+            status: res.status || completionName,
+            approvedAt: new Date().toISOString(),
+            approvedById: currentUserName,
+          });
+        } else {
+          setPermissionNotice(res.message || 'Failed to complete task.');
+          setTimeout(() => setPermissionNotice(null), 4000);
+        }
+      } catch (err: any) {
+        setPermissionNotice(err.message || 'Failed to complete task.');
+        setTimeout(() => setPermissionNotice(null), 4000);
+      }
+      return;
     }
 
+    // Non-completion status changes: no local approval record is created.
     onUpdateTask({
       ...task,
-      status: newStatus,
-      reviewFeedback: feedback,
-      reviewHistory: history,
+      status: newStatus as Task['status'],
     });
   };
 
@@ -324,7 +399,7 @@ export default function ProjectDetailsPage({
     setDraggedTaskId(taskId);
   };
 
-  const handleDragOver = (e: React.DragEvent, status: Task['status']) => {
+  const handleDragOver = (e: React.DragEvent, status: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverColumn !== status) setDragOverColumn(status);
@@ -334,7 +409,7 @@ export default function ProjectDetailsPage({
     setDragOverColumn(null);
   };
 
-  const handleDrop = (e: React.DragEvent, targetStatus: Task['status']) => {
+  const handleDrop = (e: React.DragEvent, targetStatus: string) => {
     e.preventDefault();
     setDragOverColumn(null);
     const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
@@ -359,10 +434,10 @@ export default function ProjectDetailsPage({
 
   const taskStats = {
     total: projectTasks.length,
-    completed: projectTasks.filter((t) => t.status === 'Completed').length,
-    inProgress: projectTasks.filter((t) => t.status === 'In Progress').length,
-    underReview: projectTasks.filter((t) => t.status === 'Under Review').length,
-    notStarted: projectTasks.filter((t) => t.status === 'Not Started').length,
+    completed: projectTasks.filter((t) => t.approvedAt && t.approvedById).length,
+    inProgress: projectTasks.filter((t) => t.status === 'In Progress' && !(t.approvedAt && t.approvedById)).length,
+    underReview: projectTasks.filter((t) => t.status === 'Under Review' && !(t.approvedAt && t.approvedById)).length,
+    notStarted: projectTasks.filter((t) => t.status === 'Not Started' && !(t.approvedAt && t.approvedById)).length,
   };
 
   return (
@@ -389,7 +464,7 @@ export default function ProjectDetailsPage({
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[11px] font-mono text-purple-300/80 px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20">
+              <span className="text-[11px] font-mono text-accent-light px-2 py-0.5 rounded-md bg-accent-soft border border-accent/20">
                 {project.id}
               </span>
               {getStatusBadge(project.status)}
@@ -407,12 +482,12 @@ export default function ProjectDetailsPage({
             )}
           </div>
           <div className="flex items-center gap-2.5 shrink-0 bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-2.5">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center shadow-md shadow-purple-500/20 ring-1 ring-purple-500/30">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-bold text-xs flex items-center justify-center shadow-md shadow-accent/20 ring-1 ring-accent/30">
               {project.manager.avatarInitials}
             </div>
             <div>
               <div className="text-xs font-semibold text-white">{project.manager.name}</div>
-              <div className="text-[10px] text-purple-300 flex items-center gap-1">
+              <div className="text-[10px] text-accent-light flex items-center gap-1">
                 <UserCheck className="w-3 h-3" />
                 <span>Project Manager</span>
               </div>
@@ -432,7 +507,7 @@ export default function ProjectDetailsPage({
           <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3">
             <div className="text-[10px] text-slate-400 mb-1">Deadline</div>
             <div className="text-xs text-white font-medium flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-purple-400" />
+              <Clock className="w-3.5 h-3.5 text-accent-light" />
               {project.deadline}
             </div>
           </div>
@@ -451,7 +526,7 @@ export default function ProjectDetailsPage({
                   className={`h-full rounded-full transition-all duration-500 ${
                     project.progress === 100
                       ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                      : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                      : 'bg-gradient-to-r from-accent to-accent-hover'
                   }`}
                   style={{ width: `${project.progress}%` }}
                 />
@@ -473,7 +548,7 @@ export default function ProjectDetailsPage({
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/25'
+                  ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-md shadow-accent/25'
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
               }`}
             >
@@ -489,7 +564,7 @@ export default function ProjectDetailsPage({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2 rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl">
             <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-purple-400" />
+              <TrendingUp className="w-4 h-4 text-accent-light" />
               Task Status Breakdown
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -513,7 +588,7 @@ export default function ProjectDetailsPage({
                 </div>
                 <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-700"
+                    className="h-full rounded-full bg-gradient-to-r from-accent to-accent-hover transition-all duration-700"
                     style={{ width: `${project.progress}%` }}
                   />
                 </div>
@@ -531,13 +606,13 @@ export default function ProjectDetailsPage({
 
           <div className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl space-y-4">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Briefcase className="w-4 h-4 text-purple-400" />
+              <Briefcase className="w-4 h-4 text-accent-light" />
               Project Details
             </h3>
             <div className="space-y-3 text-xs">
               <div>
                 <span className="text-slate-400 block">Project ID</span>
-                <span className="font-mono text-purple-300">{project.id}</span>
+                <span className="font-mono text-accent-light">{project.id}</span>
               </div>
               <div>
                 <span className="text-slate-400 block mb-1">Status</span>
@@ -622,7 +697,7 @@ export default function ProjectDetailsPage({
                   onClick={() => setTaskViewMode('list')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     taskViewMode === 'list'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                      ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-md shadow-accent/30'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
                   title="List View"
@@ -635,7 +710,7 @@ export default function ProjectDetailsPage({
                   onClick={() => setTaskViewMode('board')}
                   className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     taskViewMode === 'board'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                      ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-md shadow-accent/30'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
                   title="Board View"
@@ -652,7 +727,7 @@ export default function ProjectDetailsPage({
                   <button
                     type="button"
                     onClick={handleOpenTaskModal}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 transition-all cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-lg shadow-accent/25 transition-all cursor-pointer shrink-0"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add Task</span>
@@ -694,7 +769,7 @@ export default function ProjectDetailsPage({
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             <span className="text-[10px] text-slate-500 font-mono">{task.id}</span>
                             {task.comments && task.comments.length > 0 && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-light bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
                                 <MessageSquare className="w-2.5 h-2.5" />
                                 {task.comments.length}
                               </span>
@@ -712,7 +787,7 @@ export default function ProjectDetailsPage({
                               </span>
                             )}
                             {task.subtasks && task.subtasks.length > 0 && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-light bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
                                 <CheckSquare className="w-2.5 h-2.5" />
                                 {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length} subtasks
                               </span>
@@ -722,12 +797,12 @@ export default function ProjectDetailsPage({
                             <div className="mt-2 p-2.5 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2 max-w-md">
                               <div className="flex items-center justify-between text-[11px]">
                                 <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                                  <CheckSquare className="w-3.5 h-3.5 text-purple-400" />
+                                  <CheckSquare className="w-3.5 h-3.5 text-accent-light" />
                                   <span>
                                     {task.subtasks.filter((s) => s.completed).length} of {task.subtasks.length} subtasks completed
                                   </span>
                                 </span>
-                                <span className="text-[10px] font-mono text-purple-300 font-semibold">
+                                <span className="text-[10px] font-mono text-accent-light font-semibold">
                                   {Math.round((task.subtasks.filter((s) => s.completed).length / task.subtasks.length) * 100)}%
                                 </span>
                               </div>
@@ -736,7 +811,7 @@ export default function ProjectDetailsPage({
                                   className={`h-full rounded-full transition-all duration-300 ${
                                     task.subtasks.filter((s) => s.completed).length === task.subtasks.length
                                       ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                                      : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                      : 'bg-gradient-to-r from-accent to-accent-hover'
                                   }`}
                                   style={{
                                     width: `${Math.round(
@@ -774,7 +849,7 @@ export default function ProjectDetailsPage({
                                         className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
                                           st.completed
                                             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                                            : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                                            : 'border-slate-700 bg-slate-800 text-transparent hover:border-accent'
                                         } ${canManage ? 'cursor-pointer' : 'cursor-default'}`}
                                       >
                                         {st.completed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
@@ -793,7 +868,7 @@ export default function ProjectDetailsPage({
                             </div>
                           )}
                           {task.reviewFeedback && (
-                            <div className="mt-1 text-[10px] text-purple-300/80 line-clamp-1 italic">
+                            <div className="mt-1 text-[10px] text-accent-light line-clamp-1 italic">
                               Note: {task.reviewFeedback}
                             </div>
                           )}
@@ -801,7 +876,7 @@ export default function ProjectDetailsPage({
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           {task.assignedTo ? (
                             <span className="flex items-center gap-1.5">
-                              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[9px] flex items-center justify-center">
+                              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-bold text-[9px] flex items-center justify-center">
                                 {task.assignedTo.slice(0, 2).toUpperCase()}
                               </div>
                               <span>{task.assignedTo}</span>
@@ -817,16 +892,16 @@ export default function ProjectDetailsPage({
                           {task.deadline || <span className="text-slate-500">—</span>}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          {getTaskStatusBadge(task.status, task.tlRecommendation)}
+                          {getTaskStatusBadge(task.status, task.tlRecommendation, isLegacyUnapprovedDone(task))}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap text-right">
                           <button
                             type="button"
                             onClick={() => setReviewingTask(task)}
-                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-accent-soft hover:bg-accent-soft text-accent-light border border-accent/30 transition-all cursor-pointer inline-flex items-center gap-1.5"
                           >
                             <MessageSquare className="w-3 h-3" />
-                            <span>{task.status === 'Completed' ? 'View Details' : 'Details & Review'}</span>
+                            <span>{task.status === completionName ? 'View Details' : 'Details & Review'}</span>
                           </button>
                         </td>
                       </tr>
@@ -838,7 +913,7 @@ export default function ProjectDetailsPage({
           ) : (
             /* Project Details Board View */
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
-              {TASK_STATUSES.map((statusKey) => {
+              {effectiveStatuses.map((statusKey) => {
                 const columnTasks = projectTasks.filter((t) => t.status === statusKey);
                 const isDropTarget = dragOverColumn === statusKey;
 
@@ -850,7 +925,7 @@ export default function ProjectDetailsPage({
                     onDrop={(e) => handleDrop(e, statusKey)}
                     className={`rounded-2xl bg-[#0f173b]/95 border transition-all flex flex-col min-h-[380px] shadow-xl ${
                       isDropTarget
-                        ? 'border-purple-500 ring-2 ring-purple-500/30 bg-[#141d4b]'
+                        ? 'border-accent ring-2 ring-accent/30 bg-[#141d4b]'
                         : 'border-slate-700/70'
                     }`}
                   >
@@ -874,7 +949,7 @@ export default function ProjectDetailsPage({
                             key={task.id}
                             draggable
                             onDragStart={(e) => handleDragStart(e, task.id)}
-                            className="p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-purple-500/60 shadow-md space-y-2 cursor-grab active:cursor-grabbing group hover:shadow-purple-500/10 transition-all"
+                            className="p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-accent/60 shadow-md space-y-2 cursor-grab active:cursor-grabbing group hover:shadow-accent/10 transition-all"
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="text-[10px] text-slate-400 font-mono">
@@ -889,8 +964,8 @@ export default function ProjectDetailsPage({
                               {task.title}
                             </h4>
                             {task.subtasks && task.subtasks.length > 0 && (
-                              <div className="text-[10px] text-purple-300 flex items-center gap-1 pt-1 border-t border-slate-800">
-                                <CheckSquare className="w-3 h-3 text-purple-400" />
+                              <div className="text-[10px] text-accent-light flex items-center gap-1 pt-1 border-t border-slate-800">
+                                <CheckSquare className="w-3 h-3 text-accent-light" />
                                 <span>
                                   {task.subtasks.filter((s) => s.completed).length}/{task.subtasks.length} subtasks
                                 </span>
@@ -903,9 +978,9 @@ export default function ProjectDetailsPage({
                               <button
                                 type="button"
                                 onClick={() => setReviewingTask(task)}
-                                className="px-2 py-0.5 rounded text-[10px] bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/35 cursor-pointer font-semibold"
+                                className="px-2 py-0.5 rounded text-[10px] bg-accent-soft text-accent-light border border-accent/30 hover:bg-accent-soft cursor-pointer font-semibold"
                               >
-                                {task.status === 'Completed' ? 'Details' : 'Review'}
+                                {task.status === completionName ? 'Details' : 'Review'}
                               </button>
                             </div>
                           </div>
@@ -949,7 +1024,7 @@ export default function ProjectDetailsPage({
           </div>
           {hookTeamMembers.length === 0 ? (
             <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-10 text-center flex flex-col items-center justify-center min-h-[280px]">
-              <div className="w-14 h-14 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent-light mb-4">
                 <Users className="w-7 h-7" />
               </div>
               <h4 className="text-base font-bold text-white">No team members assigned</h4>
@@ -964,13 +1039,13 @@ export default function ProjectDetailsPage({
                 return (
                   <div
                     key={member.id}
-                    className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-4 flex items-center gap-3 hover:border-purple-500/40 transition-all shadow-lg"
+                    className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-4 flex items-center gap-3 hover:border-accent/40 transition-all shadow-lg"
                   >
                     <div
                       className={`w-10 h-10 rounded-xl text-white font-bold text-sm flex items-center justify-center shadow-md shrink-0 ${
                         isTL
                           ? 'bg-gradient-to-tr from-amber-500 to-orange-500 shadow-amber-500/20'
-                          : 'bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-purple-500/20'
+                          : 'bg-gradient-to-tr from-accent to-accent-hover shadow-accent/20'
                       }`}
                     >
                       {member.name
@@ -988,7 +1063,7 @@ export default function ProjectDetailsPage({
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-purple-300">{member.role}</div>
+                      <div className="text-[11px] text-accent-light">{member.role}</div>
                       <div className="text-[10px] text-slate-400 truncate">{member.skills && member.skills.length > 0 ? member.skills.join(', ') : 'No skills recorded'}</div>
                     </div>
                   </div>
@@ -1005,7 +1080,7 @@ export default function ProjectDetailsPage({
           <div className="relative w-full max-w-md bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 shadow-2xl my-8">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white shadow-md shadow-accent/25">
                   <CheckSquare className="w-5 h-5" />
                 </div>
                 <div>
@@ -1023,15 +1098,15 @@ export default function ProjectDetailsPage({
             </div>
 
             <div className="mt-4 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
-              <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-accent-light shrink-0 mt-0.5" />
               <span>
                 <strong>Project pre-selected:</strong> This task will belong to "{project.name}".
               </span>
             </div>
 
             {taskFormNotice && (
-              <div className="mt-3 p-3 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <div className="mt-3 p-3 rounded-xl bg-accent-soft border border-accent/40 text-accent-light text-xs flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-accent-light shrink-0 mt-0.5" />
                 <span>{taskFormNotice}</span>
               </div>
             )}
@@ -1039,7 +1114,7 @@ export default function ProjectDetailsPage({
             <form onSubmit={handleTaskFormSubmit} className="mt-4 space-y-4">
               <div>
                 <label htmlFor="taskTitle" className="block text-xs font-medium text-slate-200 mb-1">
-                  Task Title <span className="text-purple-400">*</span>
+                  Task Title <span className="text-accent-light">*</span>
                 </label>
                 <input
                   id="taskTitle"
@@ -1048,7 +1123,7 @@ export default function ProjectDetailsPage({
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   placeholder="e.g. Design API schema"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80"
                 />
               </div>
 
@@ -1065,7 +1140,7 @@ export default function ProjectDetailsPage({
                     id="taskAssignee"
                     value={taskForm.assignedTo}
                     onChange={(e) => setTaskForm({ ...taskForm, assignedTo: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
                     <option value="" className="bg-[#0f173b]">— Unassigned —</option>
                     {hookTeamMembers
@@ -1088,7 +1163,7 @@ export default function ProjectDetailsPage({
                     id="taskPriority"
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value as Task['priority'] })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
                     {PRIORITIES.map((p) => (
                       <option key={p} value={p} className="bg-[#0f173b]">{p}</option>
@@ -1103,9 +1178,9 @@ export default function ProjectDetailsPage({
                     id="taskStatus"
                     value={taskForm.status}
                     onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value as Task['status'] })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80 cursor-pointer"
                   >
-                    {TASK_STATUSES.map((s) => (
+                    {effectiveStatuses.map((s) => (
                       <option key={s} value={s} className="bg-[#0f173b]">{s}</option>
                     ))}
                   </select>
@@ -1121,7 +1196,7 @@ export default function ProjectDetailsPage({
                   type="date"
                   value={taskForm.deadline}
                   onChange={(e) => setTaskForm({ ...taskForm, deadline: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent/80"
                 />
               </div>
 
@@ -1135,7 +1210,7 @@ export default function ProjectDetailsPage({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/30 transition-all cursor-pointer"
                 >
                   Add Task
                 </button>

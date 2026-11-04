@@ -1,0 +1,80 @@
+/* Theme CSS Variables - Professional PMS Theme */
+:root {
+  --bg-page: #F4F5F7;
+  --bg-card: #FFFFFF;
+  --border: #E5E7EB;
+  --text-primary: #172B4D;
+  --text-muted: #5B6472;
+  --bg-sidebar: #1E293B;
+  --text-sidebar: #CBD5E1;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-light: #DBEAFE;
+  --status-todo: #5B6472;
+  --status-progress: #2563EB;
+  --status-review: #7C3AED;
+  --status-done: #16A34A;
+  --status-blocked: #DC2626;
+  --status-warning: #F59E0B;
+  --priority-high: #DC2626;
+  --priority-medium: #F59E0B;
+  --priority-low: #16A34A;
+
+  /* Accent defaults to blue (#2563EB) - comes from accent variables only */
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-light: #DBEAFE;
+  --accent-soft: rgba(37, 99, 235, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Purple accent */
+html[data-accent="purple"] {
+  --accent: #9333ea;
+  --accent-hover: #7e22ce;
+  --accent-light: #c084fc;
+  --accent-soft: rgba(147, 51, 234, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Indigo accent */
+html[data-accent="indigo"] {
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-light: #818cf8;
+  --accent-soft: rgba(79, 70, 229, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Emerald accent */
+html[data-accent="emerald"] {
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-light: #34d399;
+  --accent-soft: rgba(5, 150, 105, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Blue accent (default) */
+html[data-accent="blue"] {
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-light: #60A5FA;
+  --accent-soft: rgba(37, 99, 235, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Professional Blue accent */
+html[data-accent="professional"] {
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-light: #DBEAFE;
+  --accent-soft: rgba(37, 99, 235, 0.15);
+  --accent-text: #ffffff;
+}
+
+/* Ensure accessibility contrast and focus outlines */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

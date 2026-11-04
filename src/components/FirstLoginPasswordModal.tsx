@@ -82,7 +82,7 @@ export default function FirstLoginPasswordModal({
           <span className="text-slate-400 block text-[11px]">Signed in as:</span>
           <span className="font-medium text-white">{user.email}</span>
         </div>
-        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold text-[11px]">
+        <span className="px-2 py-0.5 rounded bg-accent-soft text-accent-light border border-accent/30 font-semibold text-[11px]">
           {user.role}
         </span>
       </div>

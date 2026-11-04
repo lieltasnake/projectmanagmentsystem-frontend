@@ -22,6 +22,18 @@ export interface Project {
   teamMemberIds?: string[];
 }
 
+export interface ProjectStatus {
+  id: string;
+  projectId: string;
+  name: string;
+  color: string | null;
+  sortOrder: number;
+  isSystem: boolean;
+  isCompletionStatus: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type UserRole = 'Project Manager' | 'Team Leader' | 'Team Member' | 'Tester';
 
 export interface TaskReviewEntry {
@@ -98,7 +110,8 @@ export interface Task {
   projectId: string;
   assignedTo?: string;
   assignedToId?: string | null;
-  status: 'Not Started' | 'Seen' | 'In Progress' | 'On Hold' | 'Under Review' | 'Changes Requested' | 'Bug Fix Required' | 'Ready for Approval' | 'Completed';
+  status: string;
+  statusId?: string | null;
   priority: 'High' | 'Medium' | 'Low';
   deadline: string;
   createdAt?: string;
@@ -107,6 +120,8 @@ export interface Task {
   reviewFeedback?: string;
   firstViewedAt?: string | null;
   onHoldReason?: string | null;
+  approvedAt?: string | null;
+  approvedById?: string | null;
   reviewHistory?: TaskReviewEntry[];
   comments?: TaskComment[];
   attachments?: TaskAttachment[];
@@ -163,7 +178,7 @@ export interface NotificationPreferences {
 
 export interface AppearanceSettings {
   theme: 'dark' | 'light';
-  accentColor: 'purple' | 'indigo' | 'emerald' | 'blue';
+  accentColor: 'purple' | 'indigo' | 'emerald' | 'blue' | 'professional';
   compactMode: boolean;
 }
 

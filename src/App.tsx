@@ -72,6 +72,11 @@ export default function App() {
     })
   );
 
+  // Keep brand accent in sync with the single source of truth
+  useEffect(() => {
+    document.documentElement.dataset.accent = appearanceSettings.accentColor || 'purple';
+  }, [appearanceSettings.accentColor]);
+
   // Backend Notification State
   const [backendNotifications, setBackendNotifications] = useState<any[]>([]);
 
@@ -160,11 +165,14 @@ export default function App() {
                 title: t.title,
                 description: t.description || '',
                 status: t.status,
+                statusId: t.statusId ?? null,
                 priority: t.priority,
                 assignedTo: t.assignedTo ?? member?.name,
                 assignedToId: t.assignedToId,
                 deadline: t.deadline || '',
                 createdAt: t.createdAt,
+                approvedAt: t.approved_at ?? null,
+                approvedById: t.approved_by_id ?? null,
                 subtasks: [],
                 comments: [],
                 attachments: [],
@@ -306,9 +314,11 @@ export default function App() {
       await createProjectTask(newTask.projectId, {
         title: newTask.title,
         description: newTask.description,
-        assignedToId: member?.id,
+        assignedToId: newTask.assignedToId || member?.id,
         priority: newTask.priority,
         deadline: newTask.deadline || undefined,
+        status: newTask.status,
+        statusId: newTask.statusId,
       });
       // refresh tasks
       const allTasks: Task[] = [];
@@ -324,11 +334,14 @@ export default function App() {
               title: t.title,
               description: t.description || '',
               status: t.status,
+              statusId: t.statusId ?? null,
               priority: t.priority,
               assignedTo: mem?.name,
               assignedToId: t.assignedToId,
               deadline: t.deadline || '',
               createdAt: t.createdAt,
+              approvedAt: t.approved_at ?? null,
+              approvedById: t.approved_by_id ?? null,
               subtasks: [],
               comments: [],
               attachments: [],

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { pool } from '../db';
+import { pool, taskStatusesTableExists } from '../db';
 import { authenticateToken, requirePM, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
@@ -29,6 +29,8 @@ function normalizeProjectStatus(value: unknown): string {
     ON_HOLD: 'On Hold',
     PLANNING: 'Planning',
     COMPLETED: 'Completed',
+    'NOT STARTED': 'Planning',
+    NOT_STARTED: 'Planning',
   };
   return mapping[upper] || (VALID_PROJECT_STATUSES.includes(v) ? v : 'Planning');
 }
@@ -174,6 +176,7 @@ router.post('/', authenticateToken, requirePM, async (req: AuthenticatedRequest,
       priority,
       teamLeaderId,
       teamMemberIds,
+      statuses,
     } = req.body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -240,6 +243,72 @@ router.post('/', authenticateToken, requirePM, async (req: AuthenticatedRequest,
          SELECT $1, unnest($2::BIGINT[])
          ON CONFLICT (project_id, user_id) DO NOTHING`,
         [project.id, allTeamIds]
+      );
+    }
+
+    // Insert task statuses for the new project (inside the same transaction)
+    // Skips gracefully if migration 020 has not yet been applied.
+    const statusesTableExists = await taskStatusesTableExists(client);
+    if (statusesTableExists) {
+      let projectStatuses = statuses;
+      if (!Array.isArray(projectStatuses) || projectStatuses.length === 0) {
+        // Default statuses
+        projectStatuses = [
+          { name: 'Not Started', color: null, sortOrder: 1, isCompletionStatus: false },
+          { name: 'In Progress', color: null, sortOrder: 2, isCompletionStatus: false },
+          { name: 'Under Review', color: null, sortOrder: 3, isCompletionStatus: false },
+          { name: 'Completed', color: null, sortOrder: 4, isCompletionStatus: true },
+        ];
+      }
+
+      // Ensure exactly one completion status
+      let completionCount = 0;
+      for (const s of projectStatuses) {
+        if (s.isCompletionStatus) completionCount++;
+      }
+      if (completionCount !== 1) {
+        // Default the last status as completion if not exactly one
+        for (const s of projectStatuses) {
+          s.isCompletionStatus = false;
+        }
+        if (projectStatuses.length > 0) {
+          projectStatuses[projectStatuses.length - 1].isCompletionStatus = true;
+        }
+      }
+
+      // Validate at least one status
+      if (projectStatuses.length === 0) {
+        await client.query('ROLLBACK').catch(() => {});
+        return res.status(400).json({ success: false, error: 'At least one task status is required.' });
+      }
+
+      // Validate no duplicate names
+      const names = projectStatuses.map((s: any) => String(s.name || '').trim());
+      if (new Set(names).size !== names.length) {
+        await client.query('ROLLBACK').catch(() => {});
+        return res.status(400).json({ success: false, error: 'Duplicate status names are not allowed.' });
+      }
+
+      for (let i = 0; i < projectStatuses.length; i++) {
+        const s = projectStatuses[i];
+        const statusName = String(s.name || '').trim();
+        if (!statusName) {
+          await client.query('ROLLBACK').catch(() => {});
+          return res.status(400).json({ success: false, error: 'Status name cannot be empty.' });
+        }
+        const color = s.color || null;
+        const sortOrder = s.sortOrder !== undefined ? Number(s.sortOrder) : i + 1;
+        const isCompletion = Boolean(s.isCompletionStatus);
+        await client.query(
+          `INSERT INTO task_statuses (project_id, name, sort_order, color, is_system, is_completion_status)
+           VALUES ($1, $2, $3, $4, FALSE, $5)
+           ON CONFLICT (project_id, name) DO NOTHING`,
+          [project.id, statusName, sortOrder, color, isCompletion]
+        );
+      }
+    } else {
+      console.warn(
+        `⚠️ Migration 020 not applied: task_statuses table missing. Project ${project.id} created without default statuses.`
       );
     }
 
@@ -400,6 +469,21 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({
         success: false,
         error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (!statusesTableExistsLocal) {
+      // Migration 020 not applied: return default fallback statuses gracefully
+      return res.status(200).json({
+        success: true,
+        count: 4,
+        statuses: [
+          { id: 'legacy-1', projectId: String(projectId), name: 'Not Started', color: '#3b82f6', sortOrder: 1, isSystem: true, isCompletionStatus: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          { id: 'legacy-2', projectId: String(projectId), name: 'In Progress', color: '#6366f1', sortOrder: 2, isSystem: true, isCompletionStatus: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          { id: 'legacy-3', projectId: String(projectId), name: 'Under Review', color: '#f59e0b', sortOrder: 3, isSystem: true, isCompletionStatus: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          { id: 'legacy-4', projectId: String(projectId), name: 'Completed', color: '#10b981', sortOrder: 4, isSystem: true, isCompletionStatus: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        ],
       });
     }
 
@@ -777,6 +861,9 @@ router.get('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, re
       });
     }
 
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    const statusIdSelect = statusesTableExistsLocal ? 't.status_id,' : '';
+
     const result = await client.query(
       `
       SELECT
@@ -785,6 +872,7 @@ router.get('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, re
         t.title,
         t.description,
         t.status,
+        ${statusIdSelect}
         t.priority,
         t.assigned_to_id,
         u.name AS assigned_to_name,
@@ -818,6 +906,7 @@ router.get('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, re
       title: r.title,
       description: r.description || '',
       status: statusMap[String(r.status || '').toUpperCase()] || 'Not Started',
+      statusId: r.status_id ? String(r.status_id) : null,
       priority: priorityMap[String(r.priority || '').toUpperCase()] || 'Medium',
       assignedToId: r.assigned_to_id ? String(r.assigned_to_id) : null,
       assignedTo: r.assigned_to_name || null,
@@ -879,7 +968,7 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
       });
     }
 
-    const { title, description, assignedToId, priority, deadline } = req.body || {};
+    const { title, description, assignedToId, priority, deadline, status, statusId } = req.body || {};
 
     if (typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ success: false, error: 'Task title is required.' });
@@ -944,11 +1033,68 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
       deadlineVal = String(deadline).trim();
     }
 
+    // Look up the 'Not Started' status for this project
+    // Skips gracefully if migration 020 has not yet been applied.
+    let targetStatusName = 'Not Started';
+    let targetStatusId: number | null = null;
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+
+    if (statusesTableExistsLocal) {
+      if (statusId) {
+        const sRes = await client.query(
+          'SELECT id, name FROM task_statuses WHERE project_id = $1 AND id = $2 LIMIT 1',
+          [projectId, Number(statusId)]
+        );
+        if (sRes.rows.length > 0) {
+          targetStatusId = sRes.rows[0].id;
+          targetStatusName = sRes.rows[0].name;
+        }
+      }
+      if (!targetStatusId && status) {
+        const sRes = await client.query(
+          'SELECT id, name FROM task_statuses WHERE project_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) LIMIT 1',
+          [projectId, String(status)]
+        );
+        if (sRes.rows.length > 0) {
+          targetStatusId = sRes.rows[0].id;
+          targetStatusName = sRes.rows[0].name;
+        }
+      }
+      if (!targetStatusId) {
+        const defaultStatusRes = await client.query(
+          `SELECT id, name FROM task_statuses WHERE project_id = $1 
+           ORDER BY CASE WHEN LOWER(name) = 'not started' THEN 0 ELSE 1 END, sort_order ASC, id ASC LIMIT 1`,
+          [projectId]
+        );
+        if (defaultStatusRes.rows.length > 0) {
+          targetStatusId = defaultStatusRes.rows[0].id;
+          targetStatusName = defaultStatusRes.rows[0].name;
+        }
+      }
+    } else {
+      console.warn(
+        `⚠️ Migration 020 not applied: task_statuses table missing. Task will be created without status_id.`
+      );
+    }
+
+    const legacyMap: Record<string, string> = {
+      'Not Started': 'TODO',
+      'In Progress': 'IN_PROGRESS',
+      'Under Review': 'REVIEW',
+      'Completed': 'DONE',
+      'Seen': 'SEEN',
+      'On Hold': 'ON_HOLD',
+      'Changes Requested': 'CHANGES_REQUESTED',
+      'Bug Fix Required': 'BUG_FIX_REQUIRED',
+      'Ready for Approval': 'READY_FOR_APPROVAL',
+    };
+    const dbStatus = legacyMap[targetStatusName] || 'TODO';
+
     const insertRes = await client.query(
-      `INSERT INTO tasks (project_id, title, description, status, priority, assigned_to_id, deadline, due_date, created_at)
-       VALUES ($1, $2, $3, 'TODO', $4, $5, $6, $6, CURRENT_TIMESTAMP)
-       RETURNING id, project_id, title, description, status, priority, assigned_to_id, deadline, due_date, created_at`,
-      [projectId, title.trim(), description ? String(description) : null, dbPriority, assignedUserId, deadlineVal]
+      `INSERT INTO tasks (project_id, title, description, status, status_id, priority, assigned_to_id, deadline, due_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, CURRENT_TIMESTAMP)
+       RETURNING id, project_id, title, description, status, status_id, priority, assigned_to_id, deadline, due_date, created_at`,
+      [projectId, title.trim(), description ? String(description) : null, dbStatus, targetStatusId, dbPriority, assignedUserId, deadlineVal]
     );
 
     const row = insertRes.rows[0];
@@ -970,7 +1116,8 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
       projectId: String(row.project_id),
       title: row.title,
       description: row.description || '',
-      status: statusMap[String(row.status || '').toUpperCase()] || 'Not Started',
+      status: targetStatusName || statusMap[String(row.status || '').toUpperCase()] || row.status || 'Not Started',
+      statusId: row.status_id ? String(row.status_id) : null,
       priority: priorityDisplayMap[String(row.priority || '').toUpperCase()] || 'Medium',
       assignedToId: row.assigned_to_id ? String(row.assigned_to_id) : null,
       deadline: row.deadline ? (row.deadline instanceof Date ? row.deadline.toISOString().slice(0,10) : String(row.deadline).slice(0,10)) : (row.due_date ? (row.due_date instanceof Date ? row.due_date.toISOString().slice(0,10) : String(row.due_date).slice(0,10)) : null),
@@ -1022,7 +1169,7 @@ router.get('/:id/team', authenticateToken, async (req: AuthenticatedRequest, res
     if (!hasAccess) {
       return res.status(403).json({
         success: false,
-        error: 'Forbidden: You do not have access to this project team.',
+        error: 'Forbidden: You do not have access to this project.',
       });
     }
 
@@ -1239,6 +1386,498 @@ router.delete('/:id/team/:userId', authenticateToken, requirePM, async (req: Aut
     await client.query('ROLLBACK').catch(() => {});
     console.error('DELETE /api/projects/:id/team/:userId error:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to remove team member.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * GET /api/projects/:id/statuses
+ * List task statuses for a project. Access: PM/TL/TM/Tester with project access.
+ */
+router.get('/:id/statuses', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const projectId = Number(req.params.id);
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+    }
+
+    const existsRes = await client.query(
+      'SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL',
+      [projectId]
+    );
+    if (existsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const result = await client.query(
+      `SELECT id, name, color, sort_order, is_system, is_completion_status, created_at, updated_at
+       FROM task_statuses
+       WHERE project_id = $1
+       ORDER BY sort_order ASC, name ASC`,
+      [projectId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      statuses: result.rows.map((r: any) => ({
+        id: String(r.id),
+        projectId: String(projectId),
+        name: r.name,
+        color: r.color,
+        sortOrder: r.sort_order,
+        isSystem: r.is_system,
+        isCompletionStatus: r.is_completion_status,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })),
+    });
+  } catch (err: any) {
+    console.error('GET /api/projects/:id/statuses error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve project statuses.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * POST /api/projects/:id/statuses
+ * Create a new task status for a project. Access: PM/TL/TM/Tester with project access.
+ */
+router.post('/:id/statuses', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const projectId = Number(req.params.id);
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+    }
+
+    const existsRes = await client.query(
+      'SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL',
+      [projectId]
+    );
+    if (existsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (!statusesTableExistsLocal) {
+      return res.status(501).json({
+        success: false,
+        error: 'Migration 020 not applied: task_statuses table does not exist. Run migration 020 before adding statuses.',
+      });
+    }
+
+    const { name, color, sortOrder } = req.body || {};
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, error: 'Status name is required.' });
+    }
+
+    const statusName = name.trim();
+    if (statusName.length > 100) {
+      return res.status(400).json({ success: false, error: 'Status name must not exceed 100 characters.' });
+    }
+
+    const statusSortOrder = sortOrder !== undefined ? Number(sortOrder) : 0;
+    if (isNaN(statusSortOrder)) {
+      return res.status(400).json({ success: false, error: 'Invalid sort order.' });
+    }
+
+    const result = await client.query(
+      `INSERT INTO task_statuses (project_id, name, color, sort_order, is_system, is_completion_status)
+       VALUES ($1, $2, $3, $4, FALSE, FALSE)
+       RETURNING id, name, color, sort_order, is_system, is_completion_status, created_at, updated_at`,
+      [projectId, statusName, color || null, statusSortOrder]
+    );
+
+    const newStatus = result.rows[0];
+
+    return res.status(201).json({
+      success: true,
+      message: 'Task status created successfully.',
+      status: {
+        id: String(newStatus.id),
+        projectId: String(projectId),
+        name: newStatus.name,
+        color: newStatus.color,
+        sortOrder: newStatus.sort_order,
+        isSystem: newStatus.is_system,
+        isCompletionStatus: newStatus.is_completion_status,
+        createdAt: newStatus.created_at,
+        updatedAt: newStatus.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('POST /api/projects/:id/statuses error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to create task status.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * PATCH /api/projects/:id/statuses/:statusId
+ * Update a task status (rename/recolor/reorder). Access: PM/TL/TM/Tester with project access.
+ */
+router.patch('/:id/statuses/:statusId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const projectId = Number(req.params.id);
+    const statusId = Number(req.params.statusId);
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+    }
+    if (!statusId || isNaN(statusId)) {
+      return res.status(400).json({ success: false, error: 'Invalid status ID.' });
+    }
+
+    const existsRes = await client.query(
+      'SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL',
+      [projectId]
+    );
+    if (existsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const statusRes = await client.query(
+      'SELECT id, name FROM task_statuses WHERE id = $1 AND project_id = $2',
+      [statusId, projectId]
+    );
+    if (statusRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Status not found.' });
+    }
+
+    const { name, color, sortOrder } = req.body || {};
+    const updateFields: string[] = [];
+    const updateValues: any[] = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ success: false, error: 'Status name is required.' });
+      }
+      const statusName = name.trim();
+      if (statusName.length > 100) {
+        return res.status(400).json({ success: false, error: 'Status name must not exceed 100 characters.' });
+      }
+      updateFields.push(`name = $${paramIndex}`);
+      updateValues.push(statusName);
+      paramIndex++;
+    }
+
+    if (color !== undefined) {
+      updateFields.push(`color = $${paramIndex}`);
+      updateValues.push(color || null);
+      paramIndex++;
+    }
+
+    if (sortOrder !== undefined) {
+      const sortOrderNum = Number(sortOrder);
+      if (isNaN(sortOrderNum)) {
+        return res.status(400).json({ success: false, error: 'Invalid sort order.' });
+      }
+      updateFields.push(`sort_order = $${paramIndex}`);
+      updateValues.push(sortOrderNum);
+      paramIndex++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ success: false, error: 'No fields to update.' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    updateValues.push(statusId);
+
+    const result = await client.query(
+      `UPDATE task_statuses SET ${updateFields.join(', ')}
+       WHERE id = $${paramIndex} AND project_id = $${paramIndex + 1}
+       RETURNING id, name, color, sort_order, is_system, is_completion_status, created_at, updated_at`,
+      [...updateValues, statusId, projectId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Status not found.' });
+    }
+
+    const updatedStatus = result.rows[0];
+
+    return res.status(200).json({
+      success: true,
+      message: 'Task status updated successfully.',
+      status: {
+        id: String(updatedStatus.id),
+        projectId: String(projectId),
+        name: updatedStatus.name,
+        color: updatedStatus.color,
+        sortOrder: updatedStatus.sort_order,
+        isSystem: updatedStatus.is_system,
+        isCompletionStatus: updatedStatus.is_completion_status,
+        createdAt: updatedStatus.created_at,
+        updatedAt: updatedStatus.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/projects/:id/statuses/:statusId error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update task status.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * DELETE /api/projects/:id/statuses/:statusId
+ * Remove a task status. Access: PM/TL/TM/Tester with project access.
+ * If status has tasks, requires replacementStatusId in body.
+ */
+router.delete('/:id/statuses/:statusId', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const projectId = Number(req.params.id);
+    const statusId = Number(req.params.statusId);
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+    }
+    if (!statusId || isNaN(statusId)) {
+      return res.status(400).json({ success: false, error: 'Invalid status ID.' });
+    }
+
+    const existsRes = await client.query(
+      'SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL',
+      [projectId]
+    );
+    if (existsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (!statusesTableExistsLocal) {
+      return res.status(501).json({
+        success: false,
+        error: 'Migration 020 not applied: task_statuses table does not exist. Cannot delete statuses.',
+      });
+    }
+
+    const statusRes = await client.query(
+      'SELECT id, name, is_completion_status FROM task_statuses WHERE id = $1 AND project_id = $2',
+      [statusId, projectId]
+    );
+    if (statusRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Status not found.' });
+    }
+
+    const status = statusRes.rows[0];
+
+    // Cannot remove the completion status
+    if (status.is_completion_status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot remove the completion status. Designate another status as completion first.',
+      });
+    }
+
+    // Count tasks using this status
+    const taskCountRes = await client.query(
+      'SELECT COUNT(*) AS cnt FROM tasks WHERE project_id = $1 AND status_id = $2 AND deleted_at IS NULL',
+      [projectId, statusId]
+    );
+    const taskCount = Number(taskCountRes.rows[0].cnt);
+
+    if (taskCount > 0) {
+      const { replacementStatusId } = req.body || {};
+      if (!replacementStatusId || isNaN(Number(replacementStatusId))) {
+        return res.status(400).json({
+          success: false,
+          error: `Status '${status.name}' is used by ${taskCount} task(s). A replacement status ID is required.`,
+        });
+      }
+
+      const replacementId = Number(replacementStatusId);
+      if (replacementId === statusId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Replacement status must be different from the status being removed.',
+        });
+      }
+
+      const replacementRes = await client.query(
+        'SELECT id FROM task_statuses WHERE id = $1 AND project_id = $2',
+        [replacementId, projectId]
+      );
+      if (replacementRes.rows.length === 0) {
+        return res.status(400).json({ success: false, error: 'Replacement status not found.' });
+      }
+
+      await client.query('BEGIN');
+
+      // Reassign tasks to replacement status
+      await client.query(
+        `UPDATE tasks SET status_id = $1, status = (SELECT name FROM task_statuses WHERE id = $1)
+         WHERE project_id = $2 AND status_id = $3 AND deleted_at IS NULL`,
+        [replacementId, projectId, statusId]
+      );
+
+      // Delete the old status
+      await client.query(
+        'DELETE FROM task_statuses WHERE id = $1 AND project_id = $2',
+        [statusId, projectId]
+      );
+
+      await client.query('COMMIT');
+
+      return res.status(200).json({
+        success: true,
+        message: `Status '${status.name}' removed. ${taskCount} task(s) reassigned to replacement status.`,
+      });
+    } else {
+      // No tasks use this status - safe to delete
+      await client.query(
+        'DELETE FROM task_statuses WHERE id = $1 AND project_id = $2',
+        [statusId, projectId]
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: `Status '${status.name}' removed successfully.`,
+      });
+    }
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('DELETE /api/projects/:id/statuses/:statusId error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to remove task status.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * PATCH /api/projects/:id/statuses/:statusId/completion
+ * Designate or remove completion status. Access: PM/TL with project access.
+ */
+router.patch('/:id/statuses/:statusId/completion', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    if (userRole !== 'PM' && userRole !== 'TL') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Only Project Managers and Team Leaders can designate completion status.',
+      });
+    }
+
+    const projectId = Number(req.params.id);
+    const statusId = Number(req.params.statusId);
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+    }
+    if (!statusId || isNaN(statusId)) {
+      return res.status(400).json({ success: false, error: 'Invalid status ID.' });
+    }
+
+    const existsRes = await client.query(
+      'SELECT 1 FROM projects WHERE id = $1 AND deleted_at IS NULL',
+      [projectId]
+    );
+    if (existsRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Project not found.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: You do not have access to this project.',
+      });
+    }
+
+    const statusRes = await client.query(
+      'SELECT id, name FROM task_statuses WHERE id = $1 AND project_id = $2',
+      [statusId, projectId]
+    );
+    if (statusRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Status not found.' });
+    }
+
+    // Unset any existing completion status, then set this one
+    await client.query(
+      `UPDATE task_statuses SET is_completion_status = FALSE WHERE project_id = $1`,
+      [projectId]
+    );
+    await client.query(
+      `UPDATE task_statuses SET is_completion_status = TRUE WHERE id = $1 AND project_id = $2`,
+      [statusId, projectId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Status '${statusRes.rows[0].name}' designated as completion status.`,
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/projects/:id/statuses/:statusId/completion error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to designate completion status.' });
   } finally {
     client.release();
   }

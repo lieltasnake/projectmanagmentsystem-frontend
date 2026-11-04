@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { pool } from '../db';
+import { pool, taskStatusesTableExists } from '../db';
 import { authenticateToken, requirePM, requireRoles, AuthenticatedRequest } from '../middleware/auth';
 import { checkProjectAccess } from './projects';
 import multer from 'multer';
@@ -398,7 +398,18 @@ router.patch('/:id/start', authenticateToken, async (req: AuthenticatedRequest, 
     const hasAccess = await checkProjectAccess(client, task.project_id, userId, userRole);
     if (!hasAccess) return res.status(403).json({ success: false, error: 'Forbidden: No access to this project.' });
 
-    await client.query('UPDATE tasks SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['IN_PROGRESS', taskId]);
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status = $1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        ['IN_PROGRESS', 'In Progress', taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        ['IN_PROGRESS', taskId]
+      );
+    }
     return res.status(200).json({ success: true, message: 'Task started.', status: 'In Progress' });
   } catch (err: any) {
     console.error('PATCH /api/tasks/:id/start error:', err.message);
@@ -435,7 +446,18 @@ router.patch('/:id/on-hold', authenticateToken, async (req: AuthenticatedRequest
     const hasAccess = await checkProjectAccess(client, task.project_id, userId, userRole);
     if (!hasAccess) return res.status(403).json({ success: false, error: 'Forbidden: No access to this project.' });
 
-    await client.query('UPDATE tasks SET status=$1, on_hold_reason=$2, updated_at=NOW() WHERE id=$3', ['ON_HOLD', String(reason).trim(), taskId]);
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status=$1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), on_hold_reason=$3, updated_at=NOW() WHERE id=$4',
+        ['ON_HOLD', 'On Hold', String(reason).trim(), taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status=$1, on_hold_reason=$2, updated_at=NOW() WHERE id=$3',
+        ['ON_HOLD', String(reason).trim(), taskId]
+      );
+    }
     return res.status(200).json({ success: true, message: 'Task put on hold.', status: 'On Hold' });
   } catch (err: any) {
     console.error('PATCH /api/tasks/:id/on-hold error:', err.message);
@@ -467,7 +489,18 @@ router.patch('/:id/resume', authenticateToken, async (req: AuthenticatedRequest,
     const hasAccess = await checkProjectAccess(client, task.project_id, userId, userRole);
     if (!hasAccess) return res.status(403).json({ success: false, error: 'Forbidden: No access to this project.' });
 
-    await client.query('UPDATE tasks SET status=$1, on_hold_reason=NULL, updated_at=NOW() WHERE id=$2', ['IN_PROGRESS', taskId]);
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status=$1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), on_hold_reason=NULL, updated_at=NOW() WHERE id=$3',
+        ['IN_PROGRESS', 'In Progress', taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status=$1, on_hold_reason=NULL, updated_at=NOW() WHERE id=$2',
+        ['IN_PROGRESS', taskId]
+      );
+    }
     return res.status(200).json({ success: true, message: 'Task resumed.', status: 'In Progress' });
   } catch (err: any) {
     console.error('PATCH /api/tasks/:id/resume error:', err.message);
@@ -533,10 +566,18 @@ router.post('/:id/submit', authenticateToken, async (req: AuthenticatedRequest, 
     );
 
     // update task
-    await client.query(
-      'UPDATE tasks SET status = $1, submitted_at = CURRENT_TIMESTAMP, submission_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-      ['REVIEW', submission.id, taskId]
-    );
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status = $1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), submitted_at = CURRENT_TIMESTAMP, submission_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+        ['REVIEW', 'Under Review', submission.id, taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status = $1, submitted_at = CURRENT_TIMESTAMP, submission_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        ['REVIEW', submission.id, taskId]
+      );
+    }
 
     await client.query('COMMIT');
     return res.status(201).json({
@@ -597,10 +638,18 @@ router.patch('/:id/request-corrections', authenticateToken, async (req: Authenti
       'INSERT INTO task_reviews (task_id, author_id, author_name, author_role, action, comment, submission_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [taskId, userId, req.user?.name || '', userRole, 'request_corrections', String(feedback).trim(), task.submission_id]
     );
-    await client.query(
-      'UPDATE tasks SET status = $1, tl_recommendation = $2, review_feedback = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
-      ['CHANGES_REQUESTED', 'corrections_requested', String(feedback).trim(), taskId]
-    );
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status = $1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), tl_recommendation = $3, review_feedback = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+        ['CHANGES_REQUESTED', 'Changes Requested', 'corrections_requested', String(feedback).trim(), taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status = $1, tl_recommendation = $2, review_feedback = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+        ['CHANGES_REQUESTED', 'corrections_requested', String(feedback).trim(), taskId]
+      );
+    }
 
     // Create notifications for assigned TM and TLs
     const assignedTmId = task.assigned_to_id;
@@ -676,10 +725,18 @@ router.post('/:id/resubmit', authenticateToken, async (req: AuthenticatedRequest
       [taskId, userId, req.user?.name || '', userRole, 'resubmit', description || null, submission.id]
     );
 
-    await client.query(
-      'UPDATE tasks SET status = $1, submitted_at = CURRENT_TIMESTAMP, submission_id = $2, tl_recommendation = NULL, review_feedback = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-      ['REVIEW', submission.id, taskId]
-    );
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET status = $1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), submitted_at = CURRENT_TIMESTAMP, submission_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+        ['REVIEW', 'Under Review', submission.id, taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status = $1, submitted_at = CURRENT_TIMESTAMP, submission_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        ['REVIEW', submission.id, taskId]
+      );
+    }
 
     await client.query('COMMIT');
     return res.status(201).json({
@@ -742,10 +799,18 @@ router.patch('/:id/recommend', authenticateToken, async (req: AuthenticatedReque
       'INSERT INTO task_reviews (task_id, author_id, author_name, author_role, action, comment, submission_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [taskId, userId, req.user?.name || '', userRole, 'recommend_approval', comment || null, task.submission_id]
     );
-    await client.query(
-      'UPDATE tasks SET tl_recommendation = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      ['recommended', taskId]
-    );
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (statusesTableExistsLocal) {
+      await client.query(
+        'UPDATE tasks SET tl_recommendation = $1, status_id = (SELECT id FROM task_statuses WHERE project_id = tasks.project_id AND name = $2 LIMIT 1), updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        ['recommended', 'Under Review', taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET tl_recommendation = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        ['recommended', taskId]
+      );
+    }
     await client.query('COMMIT');
     return res.status(200).json({ success: true, message: 'Approval recommended.', status: 'Under Review' });
   } catch (err: any) {
@@ -814,12 +879,37 @@ router.patch('/:id/approve', authenticateToken, async (req: AuthenticatedRequest
       'INSERT INTO task_reviews (task_id, author_id, author_name, author_role, action, comment, submission_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [taskId, userId, req.user?.name || '', 'PM', 'final_approve', feedback || null, task.submission_id]
     );
-    await client.query(
-      'UPDATE tasks SET status = $1, tl_recommendation = NULL, review_feedback = $2, approved_at = CURRENT_TIMESTAMP, approved_by_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
-      ['DONE', feedback || null, userId, taskId]
-    );
+
+    // Look up the project's completion status
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    let completionStatusName = 'Completed';
+    let completionStatusId: number | null = null;
+    if (statusesTableExistsLocal) {
+      const completionRes = await client.query(
+        'SELECT id, name FROM task_statuses WHERE project_id = $1 AND is_completion_status = TRUE LIMIT 1',
+        [task.project_id]
+      );
+      if (completionRes.rows.length === 0) {
+        await client.query('ROLLBACK').catch(() => {});
+        return res.status(400).json({ success: false, error: 'No completion status configured for this project.' });
+      }
+      completionStatusName = completionRes.rows[0].name;
+      completionStatusId = completionRes.rows[0].id;
+    }
+
+    if (completionStatusId !== null) {
+      await client.query(
+        'UPDATE tasks SET status = $1, status_id = $2, tl_recommendation = NULL, review_feedback = $3, approved_at = CURRENT_TIMESTAMP, approved_by_id = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+        [completionStatusName, completionStatusId, feedback || null, userId, taskId]
+      );
+    } else {
+      await client.query(
+        'UPDATE tasks SET status = $1, tl_recommendation = NULL, review_feedback = $2, approved_at = CURRENT_TIMESTAMP, approved_by_id = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+        [completionStatusName, feedback || null, userId, taskId]
+      );
+    }
     await client.query('COMMIT');
-    return res.status(200).json({ success: true, message: 'Task approved and completed.', status: 'Completed' });
+    return res.status(200).json({ success: true, message: 'Task approved and completed.', status: completionStatusName });
   } catch (err: any) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/tasks/:id/approve error:', err.message);
@@ -965,6 +1055,7 @@ assigned_to_name
         tlRecommendation: task.tl_recommendation || undefined,
         reviewFeedback: task.review_feedback || undefined,
         submissionId: task.submission_id ? String(task.submission_id) : null,
+        statusId: task.status_id ? String(task.status_id) : null,
         firstViewedAt: task.first_viewed_at || null,
         onHoldReason: task.on_hold_reason || null,
         subtasks: subRes.rows.map((s: any) => ({ id: String(s.id), title: s.title, completed: Boolean(s.completed) })),
@@ -977,6 +1068,106 @@ assigned_to_name
   } catch (err: any) {
     console.error('GET /api/tasks/:id error:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to retrieve task.' });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * PATCH /api/tasks/:id/status
+ * Update task status to a project-specific status. Access:
+ *   PM/TL: any task in authorized project.
+ *   TM: only own assigned tasks.
+ *   Tester: only own assigned testing tasks.
+ * Rejects completion status (only PM approval endpoint can complete).
+ */
+router.patch('/:id/status', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user?.id;
+    const userRole = (req.user?.role || '').toUpperCase();
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const taskId = Number(req.params.id);
+    if (!taskId || isNaN(taskId)) return res.status(400).json({ success: false, error: 'Invalid task ID.' });
+
+    const { statusId } = req.body || {};
+    if (!statusId || isNaN(Number(statusId))) {
+      return res.status(400).json({ success: false, error: 'Status ID is required.' });
+    }
+
+    const targetStatusId = Number(statusId);
+
+    // Fetch task with project info
+    const taskRes = await client.query(
+      'SELECT t.*, p.deleted_at AS project_deleted FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
+      [taskId]
+    );
+    if (taskRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Task not found.' });
+    const task = taskRes.rows[0];
+    if (task.deleted_at) return res.status(404).json({ success: false, error: 'Task not found.' });
+    if (task.project_deleted) return res.status(404).json({ success: false, error: 'Project not found.' });
+
+    // Migration 020 required for status-specific operations
+    const statusesTableExistsLocal = await taskStatusesTableExists(client);
+    if (!statusesTableExistsLocal) {
+      return res.status(501).json({
+        success: false,
+        error: 'Migration 020 not applied: task_statuses table does not exist. Cannot update task status to a project-specific status.',
+      });
+    }
+
+    // Verify the target status exists and belongs to this project
+    const statusRes = await client.query(
+      'SELECT id, name, is_completion_status FROM task_statuses WHERE id = $1 AND project_id = $2',
+      [targetStatusId, task.project_id]
+    );
+    if (statusRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Status not found in this project.' });
+    }
+    const targetStatus = statusRes.rows[0];
+
+    // Reject completion status via this endpoint (only PM approval can complete)
+    if (targetStatus.is_completion_status) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot set completion status via this endpoint. Use the PM approval workflow.',
+      });
+    }
+
+    // Role-based authorization
+    if (userRole === 'TM') {
+      if (task.assigned_to_id !== userId) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Only the assigned user can update this task status.' });
+      }
+    } else if (userRole === 'TESTER') {
+      // Tester can only update testing tasks assigned to themselves
+      if (task.assigned_to_id !== userId) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Only the assigned tester can update this task status.' });
+      }
+    } else if (userRole === 'PM' || userRole === 'TL') {
+      // PM/TL can update any task in authorized project
+    } else {
+      return res.status(403).json({ success: false, error: 'Forbidden: Unauthorized role.' });
+    }
+
+    const hasAccess = await checkProjectAccess(client, task.project_id, userId, userRole);
+    if (!hasAccess) return res.status(403).json({ success: false, error: 'Forbidden: No access to this project.' });
+
+    await client.query(
+      'UPDATE tasks SET status = $1, status_id = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+      [targetStatus.name, targetStatusId, taskId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Task status updated.',
+      status: targetStatus.name,
+      statusId: String(targetStatusId),
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/tasks/:id/status error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update task status.' });
   } finally {
     client.release();
   }

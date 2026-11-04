@@ -57,6 +57,7 @@ interface TaskReviewModalProps {
   onUpdateTask: (updatedTask: Task) => void;
   onAddBug?: (bug: Bug) => void;
   onUpdateBug?: (bug: Bug) => void;
+  onOpenSubtaskModal?: (parentTask: Task) => void;
 }
 
 function mapBackendTask(t: any, fallbackId: string): Task {
@@ -143,7 +144,7 @@ function getFileIcon(type: string, name: string) {
     return <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />;
   }
   if (type.startsWith('video/') || /\.(mp4|webm|mov|mkv)$/i.test(name)) {
-    return <Film className="w-4 h-4 text-purple-400 shrink-0" />;
+    return <Film className="w-4 h-4 text-accent-light shrink-0" />;
   }
   if (type.includes('zip') || /\.(zip|rar|tar|gz|7z)$/i.test(name)) {
     return <FileArchive className="w-4 h-4 text-amber-400 shrink-0" />;
@@ -159,7 +160,9 @@ export default function TaskReviewModal({
   bugs = [],
   onClose,
   onUpdateTask,
+  onAddBug: _onAddBug,
   onUpdateBug,
+  onOpenSubtaskModal,
 }: TaskReviewModalProps) {
   const [activeTab, setActiveTab] = useState<'workflow' | 'subtasks' | 'bugs' | 'comments' | 'attachments' | 'history'>('workflow');
   const [commentText, setCommentText] = useState('');
@@ -612,7 +615,7 @@ export default function TaskReviewModal({
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-purple-300/90 px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 font-semibold">
+                <span className="text-[10px] font-mono text-accent-light px-2 py-0.5 rounded bg-accent-soft border border-accent/30 font-semibold">
                   {task.id}
                 </span>
                 <span className="text-xs text-slate-400 font-medium">
@@ -636,12 +639,12 @@ export default function TaskReviewModal({
           {/* Current User Role Context */}
           <div className="mt-3 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 text-slate-300">
-              <User className="w-4 h-4 text-purple-400 shrink-0" />
+              <User className="w-4 h-4 text-accent-light shrink-0" />
               <span>
                 Active User: <strong className="text-white">{currentUserName}</strong>
               </span>
             </div>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 font-semibold">
+            <span className="text-[11px] px-2 py-0.5 rounded bg-accent-soft text-accent-light border border-accent/30 font-semibold">
               {currentUserRole}
             </span>
           </div>
@@ -653,7 +656,7 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('workflow')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'workflow'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -669,14 +672,14 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('subtasks')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'subtasks'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               <CheckSquare className="w-4 h-4" />
               <span>Subtasks</span>
               {totalSubtasks > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-accent-light border border-accent/30">
                   {completedSubtasksCount}/{totalSubtasks}
                 </span>
               )}
@@ -687,7 +690,7 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('bugs')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'bugs'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -711,14 +714,14 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('comments')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'comments'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
               <span>Comments</span>
               {commentsCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-accent-light border border-accent/30">
                   {commentsCount}
                 </span>
               )}
@@ -729,14 +732,14 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('attachments')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'attachments'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
               <Paperclip className="w-4 h-4" />
               <span>Attachments</span>
               {attachmentsCount > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-accent-light border border-accent/30">
                   {attachmentsCount}
                 </span>
               )}
@@ -747,7 +750,7 @@ export default function TaskReviewModal({
               onClick={() => setActiveTab('history')}
               className={`px-3 py-2 rounded-t-lg font-semibold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap border-b-2 ${
                 activeTab === 'history'
-                  ? 'border-purple-500 text-purple-300 bg-purple-500/10'
+                  ? 'border-accent text-accent-light bg-accent-soft'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
@@ -892,13 +895,13 @@ export default function TaskReviewModal({
                 <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-white flex items-center gap-1.5">
-                      <CheckSquare className="w-4 h-4 text-purple-400" />
+                      <CheckSquare className="w-4 h-4 text-accent-light" />
                       Subtask Progress ({completedSubtasksCount} of {totalSubtasks} completed)
                     </span>
                     <button
                       type="button"
                       onClick={() => setActiveTab('subtasks')}
-                      className="text-[11px] text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+                      className="text-[11px] text-accent-light hover:text-accent-light font-medium cursor-pointer"
                     >
                       Manage Subtasks →
                     </button>
@@ -909,7 +912,7 @@ export default function TaskReviewModal({
                       className={`h-full rounded-full transition-all duration-300 ${
                         completedSubtasksCount === totalSubtasks
                           ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                          : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                          : 'bg-gradient-to-r from-accent to-accent-hover'
                       }`}
                       style={{ width: `${subtaskProgressPercent}%` }}
                     />
@@ -925,7 +928,7 @@ export default function TaskReviewModal({
                           className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-colors ${
                             st.completed
                               ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                              : 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+                              : 'border-slate-700 bg-slate-800 text-transparent hover:border-accent'
                           } ${canManageSubtasks ? 'cursor-pointer' : 'cursor-default'}`}
                           title={canManageSubtasks ? (st.completed ? 'Mark incomplete' : 'Mark complete') : 'Read only'}
                         >
@@ -956,7 +959,7 @@ export default function TaskReviewModal({
                   {/* Live Demo URL with Safe External Link */}
                   <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
-                      <span className="text-[10px] text-purple-300 uppercase tracking-wider font-semibold block">
+                      <span className="text-[10px] text-accent-light uppercase tracking-wider font-semibold block">
                         Live Demo URL
                       </span>
                       <p className="text-xs text-white font-mono truncate select-all">
@@ -967,7 +970,7 @@ export default function TaskReviewModal({
                       href={task.demoSubmission.demoUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer shrink-0"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent-hover shadow-md shadow-accent/30 transition-all cursor-pointer shrink-0"
                     >
                       <span>Open Live Demo</span>
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -995,7 +998,7 @@ export default function TaskReviewModal({
                         {task.demoSubmission.screenshots.map((img) => (
                           <div
                             key={img.id}
-                            className="group relative rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 aspect-video flex items-center justify-center cursor-pointer hover:border-purple-500 transition-colors"
+                            className="group relative rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 aspect-video flex items-center justify-center cursor-pointer hover:border-accent transition-colors"
                             onClick={() => setPreviewImage({ url: img.fileUrl, title: img.name })}
                           >
                             <img
@@ -1020,7 +1023,7 @@ export default function TaskReviewModal({
                   {task.demoSubmission.video && (
                     <div className="space-y-1.5">
                       <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                        <Film className="w-3.5 h-3.5 text-purple-400" />
+                        <Film className="w-3.5 h-3.5 text-accent-light" />
                         Demo Video: {task.demoSubmission.video.name} ({formatFileSize(task.demoSubmission.video.size)})
                       </span>
                       <div className="rounded-xl overflow-hidden bg-black border border-slate-800">
@@ -1073,11 +1076,11 @@ export default function TaskReviewModal({
               {canSubmitForReview && showDemoForm && (
                 <form
                   onSubmit={handleSubmitFormalDemo}
-                  className="p-4 rounded-xl bg-[#0d1435] border border-purple-500/40 shadow-xl space-y-3.5"
+                  className="p-4 rounded-xl bg-[#0d1435] border border-accent/40 shadow-xl space-y-3.5"
                 >
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                      <Send className="w-4 h-4 text-purple-400" />
+                      <Send className="w-4 h-4 text-accent-light" />
                       Submit Formal Demo & Evidence
                     </h4>
                     <button
@@ -1104,7 +1107,7 @@ export default function TaskReviewModal({
                       </label>
                       <span className="text-[10px] text-slate-400">Max 50MB</span>
                     </div>
-                    <label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+                    <label className="border border-dashed border-slate-700 hover:border-accent/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
                       <FileArchive className="w-4 h-4 text-slate-400 mb-1" />
                       <span className="text-xs text-slate-300">
                         {demoZipFile ? `Selected: ${demoZipFile.name}` : 'Click to attach ZIP archive'}
@@ -1130,7 +1133,7 @@ export default function TaskReviewModal({
                   {/* Demo URL Input */}
                   <div>
                     <label htmlFor="formalDemoUrl" className="block text-xs font-semibold text-slate-200 mb-1">
-                      Live Demo URL <span className={demoZipFile ? 'text-slate-400' : 'text-purple-400'}>{demoZipFile ? '' : ' *'}</span>
+                      Live Demo URL <span className={demoZipFile ? 'text-slate-400' : 'text-accent-light'}>{demoZipFile ? '' : ' *'}</span>
                     </label>
                     <input
                       id="formalDemoUrl"
@@ -1139,14 +1142,14 @@ export default function TaskReviewModal({
                       value={demoUrl}
                       onChange={(e) => setDemoUrl(e.target.value)}
                       placeholder={demoZipFile ? 'ZIP selected — URL optional' : 'https://preview.example.com or http://localhost:3000'}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent font-mono"
                     />
                   </div>
 
                   {/* Completion Description */}
                   <div>
                     <label htmlFor="formalDemoDesc" className="block text-xs font-semibold text-slate-200 mb-1">
-                      Completion Summary / Description <span className="text-purple-400">*</span>
+                      Completion Summary / Description <span className="text-accent-light">*</span>
                     </label>
                     <textarea
                       id="formalDemoDesc"
@@ -1155,7 +1158,7 @@ export default function TaskReviewModal({
                       value={demoDescription}
                       onChange={(e) => setDemoDescription(e.target.value)}
                       placeholder="Briefly describe what was implemented, key test steps, and verified deliverables..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                     />
                   </div>
 
@@ -1167,7 +1170,7 @@ export default function TaskReviewModal({
                       </label>
                       <span className="text-[10px] text-slate-400">Max 10MB each</span>
                     </div>
-                    <label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+                    <label className="border border-dashed border-slate-700 hover:border-accent/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
                       <Upload className="w-4 h-4 text-slate-400 mb-1" />
                       <span className="text-xs text-slate-300">Click to attach screenshots</span>
                       <input
@@ -1206,7 +1209,7 @@ export default function TaskReviewModal({
                     {demoVideo ? (
                       <div className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-700 text-xs">
                         <div className="flex items-center gap-2 truncate">
-                          <Film className="w-4 h-4 text-purple-400 shrink-0" />
+                          <Film className="w-4 h-4 text-accent-light shrink-0" />
                           <span className="text-white truncate">{demoVideo.name}</span>
                           <span className="text-[10px] text-slate-400">({formatFileSize(demoVideo.size)})</span>
                         </div>
@@ -1219,7 +1222,7 @@ export default function TaskReviewModal({
                         </button>
                       </div>
                     ) : (
-                      <label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+                      <label className="border border-dashed border-slate-700 hover:border-accent/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
                         <Film className="w-4 h-4 text-slate-400 mb-1" />
                         <span className="text-xs text-slate-300">Click to upload demo video</span>
                         <input
@@ -1240,7 +1243,7 @@ export default function TaskReviewModal({
                       </label>
                       <span className="text-[10px] text-slate-400">PDF, DOCX, ZIP (Max 15MB)</span>
                     </div>
-                    <label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+                    <label className="border border-dashed border-slate-700 hover:border-accent/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
                       <FileText className="w-4 h-4 text-slate-400 mb-1" />
                       <span className="text-xs text-slate-300">Click to attach supporting files</span>
                       <input
@@ -1274,7 +1277,7 @@ export default function TaskReviewModal({
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-lg shadow-accent/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                     <span>Submit Demo for Formal Review</span>
@@ -1302,7 +1305,7 @@ export default function TaskReviewModal({
                         ? 'Detail requirements or specify reasons for recommendation...'
                         : 'Detail final approval notes or required revisions...'
                     }
-                    className="w-full p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                    className="w-full p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                   />
                 </div>
               )}
@@ -1323,7 +1326,7 @@ export default function TaskReviewModal({
                     <button
                       type="button"
                       onClick={() => setShowDemoForm(true)}
-                      className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Submit Formal Demo URL & Files</span>
@@ -1409,7 +1412,7 @@ export default function TaskReviewModal({
                     <button
                       type="button"
                       onClick={() => handleWorkflowAction('recommend_approval')}
-                      className="py-2.5 px-3 rounded-xl font-semibold text-xs text-indigo-100 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2.5 px-3 rounded-xl font-semibold text-xs text-indigo-100 bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <ThumbsUp className="w-3.5 h-3.5" />
                       <span>Recommend Approval to PM</span>
@@ -1538,10 +1541,10 @@ export default function TaskReviewModal({
               <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
-                    <CheckSquare className="w-4 h-4 text-purple-400" />
+                    <CheckSquare className="w-4 h-4 text-accent-light" />
                     Subtasks Progress
                   </span>
-                  <span className="font-semibold text-purple-300">
+                  <span className="font-semibold text-accent-light">
                     {totalSubtasks === 0
                       ? 'No subtasks created'
                       : `${completedSubtasksCount} of ${totalSubtasks} completed (${subtaskProgressPercent}%)`}
@@ -1553,7 +1556,7 @@ export default function TaskReviewModal({
                       className={`h-full rounded-full transition-all duration-300 ${
                         completedSubtasksCount === totalSubtasks
                           ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                          : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                          : 'bg-gradient-to-r from-accent to-accent-hover'
                       }`}
                       style={{ width: `${subtaskProgressPercent}%` }}
                     />
@@ -1566,31 +1569,42 @@ export default function TaskReviewModal({
               </div>
 
               {subtaskNotice && (
-                <div className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <div className="p-2.5 rounded-xl bg-accent-soft border border-accent/40 text-accent-light text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-accent-light shrink-0" />
                   <span>{subtaskNotice}</span>
                 </div>
               )}
 
-              {/* Add Subtask Form */}
+              {/* Add Subtask */}
               {canManageSubtasks ? (
-                <form onSubmit={handleAddSubtask} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newSubtaskTitle}
-                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                    placeholder="Enter a new subtask (e.g. Design wireframes, Review code)..."
-                    className="flex-1 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
-                  />
+                onOpenSubtaskModal ? (
                   <button
-                    type="submit"
-                    disabled={!newSubtaskTitle.trim()}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-purple-600/25 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    type="button"
+                    onClick={() => onOpenSubtaskModal(task)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover shadow-md shadow-accent/25 transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Subtask</span>
                   </button>
-                </form>
+                ) : (
+                  <form onSubmit={handleAddSubtask} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newSubtaskTitle}
+                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      placeholder="Enter a new subtask (e.g. Design wireframes, Review code)..."
+                      className="flex-1 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent/80"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!newSubtaskTitle.trim()}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-accent/25 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Subtask</span>
+                    </button>
+                  </form>
+                )
               ) : (
                 <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-400 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-slate-500 shrink-0" />
@@ -1638,7 +1652,7 @@ export default function TaskReviewModal({
                           } ${
                             st.completed
                               ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
-                              : 'border-2 border-slate-600 hover:border-purple-500 bg-slate-800/60'
+                              : 'border-2 border-slate-600 hover:border-accent bg-slate-800/60'
                           }`}
                         >
                           {st.completed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
@@ -1657,7 +1671,7 @@ export default function TaskReviewModal({
                                   if (e.key === 'Escape') handleCancelSubtaskEdit();
                                 }}
                                 autoFocus
-                                className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-purple-500 text-white focus:outline-none"
+                                className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-accent text-white focus:outline-none"
                               />
                               <button
                                 type="button"
@@ -2043,11 +2057,11 @@ export default function TaskReviewModal({
                     value={newCommentInput}
                     onChange={(e) => setNewCommentInput(e.target.value)}
                     placeholder={`Comment as ${currentUserName} (${currentUserRole})...`}
-                    className="w-full p-3 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none pr-24"
+                    className="w-full p-3 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-accent resize-none pr-24"
                   />
                   <button
                     type="submit"
-                    className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors flex items-center gap-1 cursor-pointer shadow-md"
+                    className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent hover:bg-accent-hover transition-colors flex items-center gap-1 cursor-pointer shadow-md"
                   >
                     <span>Post</span>
                     <Send className="w-3 h-3" />
@@ -2073,11 +2087,11 @@ export default function TaskReviewModal({
                     >
                       <div className="flex items-center justify-between text-slate-400">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[9px] flex items-center justify-center">
+                          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-accent to-accent-hover text-white font-bold text-[9px] flex items-center justify-center">
                             {comment.authorInitials || 'U'}
                           </div>
                           <span className="font-semibold text-white">{comment.authorName}</span>
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-accent-soft text-accent-light border border-accent/20">
                             {comment.authorRole}
                           </span>
                         </div>
@@ -2100,8 +2114,8 @@ export default function TaskReviewModal({
             <div className="space-y-4">
               {/* Attachment Upload Area */}
               <div>
-                <label className="border-2 border-dashed border-slate-700 hover:border-purple-500/70 rounded-xl p-5 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors group">
-                  <Upload className="w-6 h-6 text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
+                <label className="border-2 border-dashed border-slate-700 hover:border-accent/70 rounded-xl p-5 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors group">
+                  <Upload className="w-6 h-6 text-accent-light mb-2 group-hover:scale-110 transition-transform" />
                   <span className="text-xs font-bold text-white">Click to Select & Attach Files</span>
                   <span className="text-[11px] text-slate-400 mt-1">
                     Supports Documents (PDF, DOCX, TXT), Images (PNG, JPG), and Archives (ZIP) up to 15MB
@@ -2202,7 +2216,7 @@ export default function TaskReviewModal({
                     className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-1"
                   >
                     <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                      <span className="font-semibold text-purple-300">
+                      <span className="font-semibold text-accent-light">
                         {item.authorName} ({item.authorRole})
                       </span>
                       <span>{item.timestamp}</span>
@@ -2219,7 +2233,7 @@ export default function TaskReviewModal({
                         </span>
                       )}
                       {item.action === 'recommend_approval' && (
-                        <span className="text-purple-300 flex items-center gap-1">
+                        <span className="text-accent-light flex items-center gap-1">
                           <ThumbsUp className="w-3.5 h-3.5" /> Recommended Approval to PM
                         </span>
                       )}

@@ -1,0 +1,1427 @@
+﻿import React, { useState, useEffect } from 'react';
+import {
+  User,
+  Palette,
+  Bell,
+  Info,
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  Moon,
+  Sun,
+  AlertCircle,
+  Sparkles,
+  Check,
+  RotateCcw,
+  Clock,
+  Send,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Users,
+  Plus,
+  X,
+  Edit2,
+  Code,
+} from 'lucide-react';
+import { updateMyProfile, changeMyPassword, getRoles, createRole, updateRole, getSkills, createSkill, updateSkill } from '../services/api';
+import type {
+  UserProfile,
+  UserRole,
+  NotificationPreferences,
+  AppearanceSettings,
+  Task,
+  Project,
+} from '../types/pms';
+
+
+interface SettingsPageProps {
+  userProfile: UserProfile;
+  currentUserRole: UserRole;
+  notificationPreferences: NotificationPreferences;
+  appearanceSettings: AppearanceSettings;
+  tasks?: Task[];
+  projects?: Project[];
+  onUpdateProfile: (updated: UserProfile) => void;
+  onUpdateNotificationPreferences: (updated: NotificationPreferences) => void;
+  onUpdateAppearance: (updated: AppearanceSettings) => void;
+}
+
+export default function SettingsPage({
+  userProfile,
+  currentUserRole,
+  notificationPreferences,
+  appearanceSettings,
+  tasks = [],
+  projects: _projects = [],
+  onUpdateProfile,
+  onUpdateNotificationPreferences,
+  onUpdateAppearance,
+}: SettingsPageProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'notifications' | 'roles' | 'skills' | 'about'>('profile');
+
+  // Local form state for Profile
+  const [fullName, setFullName] = useState(userProfile.name);
+  const [email, setEmail] = useState(userProfile.email);
+  const [department, setDepartment] = useState(userProfile.department || 'Engineering & Delivery');
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+  const [profileErrorMsg, setProfileErrorMsg] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Local form state for Change Password
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [passSuccessMsg, setPassSuccessMsg] = useState('');
+  const [passErrorMsg, setPassErrorMsg] = useState('');
+  const [isSavingPass, setIsSavingPass] = useState(false);
+
+  // Keep local form inputs synchronized if userProfile updates in shared state
+  useEffect(() => {
+    setFullName(userProfile.name);
+    setEmail(userProfile.email);
+    setDepartment(userProfile.department || 'Engineering & Delivery');
+  }, [userProfile.name, userProfile.email, userProfile.department]);
+
+  // Handle Profile Save
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileErrorMsg('');
+    setProfileSuccessMsg('');
+
+    if (!fullName.trim()) {
+      setProfileErrorMsg('Full Name cannot be empty.');
+      return;
+    }
+
+    if (!email.trim() || !email.includes('@')) {
+      setProfileErrorMsg('Please enter a valid email address.');
+      return;
+    }
+
+    try {
+      setIsSavingProfile(true);
+      await updateMyProfile({ name: fullName.trim(), email: email.trim() });
+
+      onUpdateProfile({
+        name: fullName.trim(),
+        email: email.trim(),
+        role: userProfile.role, // Role cannot be modified by user
+        department: department.trim(),
+      });
+
+      setProfileSuccessMsg('Personal profile and email updated successfully.');
+      setTimeout(() => setProfileSuccessMsg(''), 4000);
+    } catch (err: any) {
+      setProfileErrorMsg(err.message || 'Failed to update personal profile.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Handle Change Password Save
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassErrorMsg('');
+    setPassSuccessMsg('');
+
+    if (!currentPassword.trim()) {
+      setPassErrorMsg('Please enter your current password.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPassErrorMsg('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPassErrorMsg('New passwords do not match. Please verify and retype.');
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setPassErrorMsg('New password must be different from your current password.');
+      return;
+    }
+
+    try {
+      setIsSavingPass(true);
+      await changeMyPassword(currentPassword, newPassword);
+      setPassSuccessMsg('Your password has been changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPassSuccessMsg(''), 5000);
+    } catch (err: any) {
+      setPassErrorMsg(err.message || 'Failed to update password.');
+    } finally {
+      setIsSavingPass(false);
+    }
+  };
+
+  // Handle Profile Reset
+  const handleResetProfile = () => {
+    setFullName(userProfile.name);
+    setEmail(userProfile.email);
+    setDepartment(userProfile.department || 'Engineering & Delivery');
+    setProfileErrorMsg('');
+    setProfileSuccessMsg('');
+  };
+
+  // Avatar Initials
+  const avatarInitials = (fullName || userProfile.name)
+    .split(/[\s._-]+/)
+    .slice(0, 2)
+    .map((s) => s.charAt(0).toUpperCase())
+    .join('') || 'U';
+
+  // Calculate live matching counts for notification preferences
+  const today = new Date();
+  const in3Days = new Date(today);
+  in3Days.setDate(in3Days.getDate() + 3);
+
+  const deadlineCount = tasks.filter((t) => {
+    if (!t.deadline || t.status === 'Completed') return false;
+    const d = new Date(t.deadline);
+    return d < today || d <= in3Days;
+  }).length;
+
+  const reviewUpdatesCount = tasks.filter(
+    (t) => t.status === 'Under Review'
+  ).length;
+
+  const correctionCount = tasks.filter(
+    (t) => t.tlRecommendation === 'corrections_requested'
+  ).length;
+
+  const completedCount = tasks.filter(
+    (t) => t.status === 'Completed'
+  ).length;
+
+  // Toggle notification preference
+  const toggleNotification = (key: keyof NotificationPreferences) => {
+    onUpdateNotificationPreferences({
+      ...notificationPreferences,
+      [key]: !notificationPreferences[key],
+    });
+  };
+
+// Roles and Skills management state
+  const [roles, setRoles] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showSkillModal, setShowSkillModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
+  const [editingSkill, setEditingSkill] = useState<any | null>(null);
+  const [roleForm, setRoleForm] = useState({ name: '', description: '' });
+  const [skillForm, setSkillForm] = useState({ name: '', description: '' });
+  const [roleMsg, setRoleMsg] = useState('');
+  const [roleErr, setRoleErr] = useState('');
+  const [skillMsg, setSkillMsg] = useState('');
+  const [skillErr, setSkillErr] = useState('');
+
+  const loadRoles = async () => {
+    try {
+      setRolesLoading(true);
+      const res = await getRoles();
+      if (res.success) setRoles(res.roles || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  const loadSkills = async () => {
+    try {
+      setSkillsLoading(true);
+      const res = await getSkills();
+      if (res.success) setSkills(res.skills || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setSkillsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRoles();
+    loadSkills();
+  }, []);
+
+  const openAddRole = () => {
+    setEditingRole(null);
+    setRoleForm({ name: '', description: '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const openEditRole = (r: any) => {
+    setEditingRole(r);
+    setRoleForm({ name: r.name || '', description: r.description || '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const saveRole = async () => {
+    setRoleMsg('');
+    setRoleErr('');
+    const name = roleForm.name.trim();
+    if (!name) {
+      setRoleErr('Role name is required.');
+      return;
+    }
+    // duplicate check client-side
+    const exists = roles.some((r) => r.id !== editingRole?.id && r.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setRoleErr('A role with this name already exists.');
+      return;
+    }
+    try {
+      if (editingRole) {
+        await updateRole(editingRole.id, { name, description: roleForm.description });
+        setRoleMsg('Role updated successfully.');
+      } else {
+        await createRole({ name, description: roleForm.description });
+        setRoleMsg('Role added successfully.');
+      }
+      await loadRoles();
+      setTimeout(() => setShowRoleModal(false), 800);
+    } catch (e: any) {
+      setRoleErr(e.message || 'Failed to save role.');
+    }
+  };
+
+  const openAddSkill = () => {
+    setEditingSkill(null);
+    setSkillForm({ name: '', description: '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const openEditSkill = (s: any) => {
+    setEditingSkill(s);
+    setSkillForm({ name: s.name || '', description: s.description || '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const saveSkill = async () => {
+    setSkillMsg('');
+    setSkillErr('');
+    const name = skillForm.name.trim();
+    if (!name) {
+      setSkillErr('Skill name is required.');
+      return;
+    }
+    const exists = skills.some((s) => s.id !== editingSkill?.id && s.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setSkillErr('A skill with this name already exists.');
+      return;
+    }
+    try {
+      if (editingSkill) {
+        await updateSkill(editingSkill.id, { name, description: skillForm.description });
+        setSkillMsg('Skill updated successfully.');
+      } else {
+        await createSkill({ name, description: skillForm.description });
+        setSkillMsg('Skill added successfully.');
+      }
+      await loadSkills();
+      setTimeout(() => setShowSkillModal(false), 800);
+    } catch (e: any) {
+      setSkillErr(e.message || 'Failed to save skill.');
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* 1. Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-800/80">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Settings
+            </h2>
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-accent-soft text-accent-light border border-accent/30">
+              Stage 4
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-slate-300">
+            Personal profile, workspace appearance, notification preferences, and system governance.
+          </p>
+        </div>
+
+        {/* Current Active Role Badge */}
+        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-[#0f173b]/80 border border-accent/20 text-xs">
+          <ShieldCheck className="w-4 h-4 text-accent-light shrink-0" />
+          <div>
+            <span className="text-slate-400">Active Role: </span>
+            <span className="font-semibold text-white">{currentUserRole}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-800/80 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('profile')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'profile'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <User className="w-4 h-4" />
+          <span>Profile</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('appearance')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'appearance'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Palette className="w-4 h-4" />
+          <span>Appearance</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('notifications')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'notifications'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>Notifications</span>
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-accent-light font-bold border border-accent/30">
+            {Object.values(notificationPreferences).filter(Boolean).length}/4
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('roles')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'roles'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Roles</span>
+        </button>
+
+<button
+          type="button"
+          onClick={() => setActiveTab('skills')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'skills'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Code className="w-4 h-4" />
+          <span>Skills</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('about')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'about'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Info className="w-4 h-4" />
+          <span>About</span>
+        </button>
+      </div>
+
+      {/* 3. Tab Contents */}
+
+      {/* â”€â”€ TAB 1: PROFILE â”€â”€ */}
+      {activeTab === 'profile' && (
+        <div className="space-y-6">
+          {/* Success / Error Alerts */}
+          {profileSuccessMsg && (
+            <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+              <span>{profileSuccessMsg}</span>
+            </div>
+          )}
+
+          {profileErrorMsg && (
+            <div className="p-4 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-sm flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+              <span>{profileErrorMsg}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left: Avatar & Identity Summary Card */}
+            <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 flex flex-col items-center text-center">
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-400 flex items-center justify-center text-white text-3xl font-extrabold shadow-xl shadow-purple-500/20 ring-4 ring-purple-500/20 mb-4">
+                {avatarInitials}
+              </div>
+              <h3 className="text-lg font-bold text-white">{fullName || userProfile.name}</h3>
+              <p className="text-xs text-slate-300 mt-0.5">{email || userProfile.email}</p>
+              
+              <div className="mt-4 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+                <span>{userProfile.role}</span>
+              </div>
+
+              <div className="mt-6 w-full pt-4 border-t border-slate-800 text-left space-y-2 text-xs">
+                <div className="flex justify-between text-slate-300">
+                  <span>Department:</span>
+                  <span className="font-medium text-white">{department}</span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span>Permission Level:</span>
+                  <span className="font-medium text-emerald-400">
+                    {userProfile.role === 'Project Manager'
+                      ? 'Full Governance (Final Approval)'
+                      : userProfile.role === 'Team Leader'
+                      ? 'Review & Recommendation'
+                      : 'Task Execution & Submission'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-slate-300">
+                  <span>Account Type:</span>
+                  <span className="font-medium text-slate-300">Workspace Member</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Editable Profile Form */}
+            <div className="lg:col-span-2 p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-5">
+                <div>
+                  <h3 className="text-base font-bold text-white">Personal Information</h3>
+                  <p className="text-xs text-slate-300">
+                    Update your display name, contact email, and operational department.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                {/* Full Name */}
+                <div>
+                  <label htmlFor="fullName" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Full Name *
+                  </label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                    placeholder="e.g. Full Name"
+                  />
+                </div>
+
+                {/* Email Address */}
+                <div>
+                  <label htmlFor="email" className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Email Address *
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                    placeholder="e.g. alex.morgan@pmsworkspace.io"
+                  />
+                </div>
+
+                {/* Department / Team Assignment (Governance Locked) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <span>Team / Department Assignment</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-amber-500/20 font-normal">
+                        Controlled by Project Manager
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Governance Locked</span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      disabled
+                      readOnly
+                      value={department}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-sm text-slate-300 cursor-not-allowed select-none font-semibold pl-10"
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  </div>
+                </div>
+
+                {/* Role (Strictly Read-Only / Non-Editable) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <span>Assigned Role</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-amber-500/20 font-normal">
+                        Self-Editing Not Permitted
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Governance Locked</span>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      disabled
+                      readOnly
+                      value={userProfile.role}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-sm text-slate-300 cursor-not-allowed select-none font-semibold pl-10"
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Users cannot change their own role. Role elevations and reassignments must be performed through workspace administrative governance.
+                  </p>
+                </div>
+
+                {/* Form Buttons */}
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={handleResetProfile}
+                    className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/60 text-xs font-semibold transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingProfile}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{isSavingProfile ? 'Saving...' : 'Save Profile Changes'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {/* Change Password Card */}
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="pb-4 border-b border-slate-800/80 mb-5">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-accent-light" />
+                <span>Change Password</span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                Update your account password. For security, your current password is required.
+              </p>
+            </div>
+
+            {passSuccessMsg && (
+              <div className="mb-4 p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+                <span>{passSuccessMsg}</span>
+              </div>
+            )}
+
+            {passErrorMsg && (
+              <div className="mb-4 p-4 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-sm flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+                <span>{passErrorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4 max-w-xl">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Current Password *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter your current password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  New Password * (minimum 6 characters)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isSavingPass}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all shadow-lg cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{isSavingPass ? 'Updating Password...' : 'Update Password'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Role Governance Scope Explanation */}
+              <div className="p-5 rounded-2xl bg-accent-soft border border-accent/20">
+            <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+                <ShieldCheck className="w-4 h-4 text-accent-light" />
+              <span>Active Governance Scope: {userProfile.role}</span>
+            </h4>
+            {userProfile.role === 'Project Manager' && (
+              <p className="text-xs text-slate-300 leading-relaxed">
+                As a <strong>Project Manager</strong>, you have exclusive authority to grant final task approval and mark tasks Completed. You can create projects, assign work, inspect live demo deliverables, and manage team members across the workspace.
+              </p>
+            )}
+            {userProfile.role === 'Team Leader' && (
+              <p className="text-xs text-slate-300 leading-relaxed">
+                As a <strong>Team Leader</strong>, you inspect submitted task deliverables and demo evidence. You can recommend tasks for final Project Manager approval or request revisions with structured feedback.
+              </p>
+            )}
+            {userProfile.role === 'Team Member' && (
+              <p className="text-xs text-slate-300 leading-relaxed">
+                As a <strong>Team Member</strong>, you work on assigned project tasks, upload progress files, engage in discussions via comments, and submit formal demo evidence with live URLs for leader review.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* â”€â”€ TAB 2: APPEARANCE â”€â”€ */}
+      {activeTab === 'appearance' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-white">Theme & Color Mode</h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Select your preferred visual mode for the PMS workspace surface.
+              </p>
+            </div>
+
+            {/* Dark Mode vs Light Mode Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Dark Mode Option */}
+              <div
+                onClick={() => onUpdateAppearance({ ...appearanceSettings, theme: 'dark' })}
+                className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative ${
+                  appearanceSettings.theme === 'dark'
+                    ? 'border-purple-500 bg-[#070b19] shadow-xl shadow-purple-500/10'
+                    : 'border-slate-800 bg-[#070b19]/60 hover:border-slate-700'
+                }`}
+              >
+                {appearanceSettings.theme === 'dark' && (
+                  <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white">
+                    <Check className="w-3.5 h-3.5" />
+                  </div>
+                )}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent-light">
+                    <Moon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Dark Mode (Default)</h4>
+                    <span className="text-[10px] text-accent-light font-medium">Recommended for PMS</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                  High-contrast deep navy and indigo aesthetic. Calibrated for long project governance sessions and eye comfort.
+                </p>
+
+                {/* Mini Preview Box */}
+                <div className="p-2.5 rounded-lg bg-[#0b112c] border border-slate-800 flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-purple-600" />
+                  <div className="h-2 w-16 rounded bg-slate-700" />
+                  <div className="h-2 w-8 rounded bg-slate-800 ml-auto" />
+                </div>
+              </div>
+
+              {/* Light Mode Option */}
+              <div
+                onClick={() => onUpdateAppearance({ ...appearanceSettings, theme: 'light' })}
+                className={`p-5 rounded-2xl border-2 transition-all cursor-pointer relative ${
+                  appearanceSettings.theme === 'light'
+                    ? 'border-purple-500 bg-slate-900 shadow-xl shadow-purple-500/10'
+                    : 'border-slate-800 bg-[#070b19]/60 hover:border-slate-700'
+                }`}
+              >
+                {appearanceSettings.theme === 'light' && (
+                  <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white">
+                    <Check className="w-3.5 h-3.5" />
+                  </div>
+                )}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <Sun className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Light Mode</h4>
+                    <span className="text-[10px] text-amber-300 font-medium">High Clarity Studio</span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                  Crisp slate surfaces with bright background styling. Ideal for daytime lighting and presentation viewing.
+                </p>
+
+                {/* Mini Preview Box */}
+                <div className="p-2.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-amber-500" />
+                  <div className="h-2 w-16 rounded bg-slate-300" />
+                  <div className="h-2 w-8 rounded bg-slate-400 ml-auto" />
+                </div>
+              </div>
+            </div>
+
+            {/* Accent Color Selection */}
+            <div className="pt-4 border-t border-slate-800">
+              <h4 className="text-sm font-bold text-white mb-1">Brand Accent Color</h4>
+              <p className="text-xs text-slate-300 mb-3">
+                Tailor the primary visual highlight across buttons, badges, and progress meters.
+              </p>
+
+              <div className="flex flex-wrap items-center gap-3">
+                {[
+                  { id: 'purple', label: 'Vibrant Purple (Default)', class: 'bg-purple-600' },
+                  { id: 'indigo', label: 'Electric Indigo', class: 'bg-indigo-600' },
+                  { id: 'emerald', label: 'Emerald Green', class: 'bg-emerald-600' },
+                  { id: 'blue', label: 'Ocean Blue', class: 'bg-blue-600' },
+                  { id: 'professional', label: 'Professional Blue', class: 'bg-blue-600' },
+                ].map((color) => (
+                  <button
+                    key={color.id}
+                    type="button"
+                    onClick={() => onUpdateAppearance({ ...appearanceSettings, accentColor: color.id as any })}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                    appearanceSettings.accentColor === color.id
+                      ? 'border-accent bg-accent-soft text-white'
+                      : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white'
+                  }`}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded-full ${color.class}`} />
+                    <span>{color.label}</span>
+                    {appearanceSettings.accentColor === color.id && (
+                      <Check className="w-3 h-3 text-accent-light ml-1" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Compact Mode Density */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-white">Compact Table & Card Layout</h4>
+                <p className="text-xs text-slate-300">
+                  Reduce padding to display more task rows and metric cards per screen.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onUpdateAppearance({
+                    ...appearanceSettings,
+                    compactMode: !appearanceSettings.compactMode,
+                  })
+                }
+                className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  appearanceSettings.compactMode ? 'bg-accent' : 'bg-slate-800'
+                }`}
+              >
+                <div
+                  className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                    appearanceSettings.compactMode ? 'left-7' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* â”€â”€ TAB 3: NOTIFICATIONS â”€â”€ */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-white">Event Notification Preferences</h3>
+                <p className="text-xs text-slate-300">
+                  Enable or disable notification categories. Disabling a category removes its alerts from the Notifications page and updates your unread badge.
+                </p>
+              </div>
+
+              {/* Bulk Toggle Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateNotificationPreferences({
+                      taskDeadlines: true,
+                      reviewUpdates: true,
+                      correctionRequests: true,
+                      taskCompletion: true,
+                    })
+                  }
+                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+                >
+                  Enable All
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateNotificationPreferences({
+                      taskDeadlines: false,
+                      reviewUpdates: false,
+                      correctionRequests: false,
+                      taskCompletion: false,
+                    })
+                  }
+                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
+                >
+                  Disable All
+                </button>
+              </div>
+            </div>
+
+            {/* Notification Category Preferences Grid */}
+            <div className="space-y-4">
+              {/* 1. Task Deadlines */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">Task Deadlines</h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500/15 text-rose-300 border border-rose-500/20">
+                        {deadlineCount} active
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      Alerts for overdue tasks that passed their deadline and upcoming tasks due within 3 days.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('taskDeadlines')}
+                  className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
+                    notificationPreferences.taskDeadlines ? 'bg-accent' : 'bg-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      notificationPreferences.taskDeadlines ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 2. Review Updates */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Send className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">Review Updates</h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
+                        {reviewUpdatesCount} under review
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      Alerts when tasks and live demo evidence are submitted for review, or when a Team Leader recommends approval.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('reviewUpdates')}
+                  className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
+                    notificationPreferences.reviewUpdates ? 'bg-accent' : 'bg-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      notificationPreferences.reviewUpdates ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 3. Correction Requests */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <RotateCcw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">Correction Requests</h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                        {correctionCount} pending
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      Alerts when a task requires revision or when reviewers return work with corrective guidance notes.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('correctionRequests')}
+                  className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
+                    notificationPreferences.correctionRequests ? 'bg-accent' : 'bg-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      notificationPreferences.correctionRequests ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 4. Task Completion */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white">Task Completion</h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
+                        {completedCount} completed
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                      Alerts when a Project Manager grants final sign-off and officially transitions a task to Completed.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('taskCompletion')}
+                  className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
+                    notificationPreferences.taskCompletion ? 'bg-accent' : 'bg-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform absolute top-1 ${
+                      notificationPreferences.taskCompletion ? 'left-7' : 'left-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Notification Bridge Notice */}
+              <div className="p-4 rounded-xl bg-accent-soft border border-accent/20 text-xs text-slate-300 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-accent-light shrink-0" />
+              <span>
+                These preferences filter notifications in real time across the workspace. When a category is turned off, its alerts are suppressed from the Notifications page and will not contribute to the sidebar unread counter.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: ROLES ── */}
+      {activeTab === 'roles' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white">Roles</h3>
+                <p className="text-xs text-slate-300">View, add, and edit custom roles. All authenticated users can manage roles.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddRole}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Role</span>
+              </button>
+            </div>
+            {roleMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{roleMsg}</span>
+              </div>
+            )}
+            {roleErr && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{roleErr}</span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {rolesLoading ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">Loading...</td></tr>
+                  ) : roles.length === 0 ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">No roles found</td></tr>
+                  ) : (
+                    roles.map((r: any) => (
+                      <tr key={r.id}>
+                        <td className="py-2.5 px-3 font-medium text-white">{r.name}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{r.description || '-'}</td>
+                        <td className="py-2.5 px-3">{r.isSystem ? 'System' : 'Custom'}</td>
+                         <td className="py-2.5 px-3 text-right">
+                           <button onClick={() => openEditRole(r)} className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-1 ml-auto">
+                             <Edit2 className="w-3 h-3" />
+                             <span>Edit</span>
+                           </button>
+                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {showRoleModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="w-full max-w-md p-6 rounded-2xl bg-[#0f173b] border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-base font-bold text-white">{editingRole ? 'Edit Role' : 'Add Role'}</h4>
+                  <button onClick={() => setShowRoleModal(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                {roleErr && <div className="mb-3 text-xs text-rose-300">{roleErr}</div>}
+                {roleMsg && <div className="mb-3 text-xs text-emerald-300">{roleMsg}</div>}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Role Name *</label>
+                    <input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Description</label>
+                    <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setShowRoleModal(false)} className="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs">Cancel</button>
+                  <button onClick={saveRole} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: SKILLS ── */}
+      {activeTab === 'skills' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white">Skills</h3>
+                <p className="text-xs text-slate-300">View, add, and edit custom skills. All authenticated users can manage skills.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddSkill}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Skill</span>
+              </button>
+            </div>
+            {skillMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{skillMsg}</span>
+              </div>
+            )}
+            {skillErr && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{skillErr}</span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {skillsLoading ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">Loading...</td></tr>
+                  ) : skills.length === 0 ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">No skills found</td></tr>
+                  ) : (
+                    skills.map((s: any) => (
+                      <tr key={s.id}>
+                        <td className="py-2.5 px-3 font-medium text-white">{s.name}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{s.description || '-'}</td>
+                        <td className="py-2.5 px-3">{s.isSystem ? 'System' : 'Custom'}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button onClick={() => openEditSkill(s)} className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-1 ml-auto">
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {showSkillModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="w-full max-w-md p-6 rounded-2xl bg-[#0f173b] border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-base font-bold text-white">{editingSkill ? 'Edit Skill' : 'Add Skill'}</h4>
+                  <button onClick={() => setShowSkillModal(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                {skillErr && <div className="mb-3 text-xs text-rose-300">{skillErr}</div>}
+                {skillMsg && <div className="mb-3 text-xs text-emerald-300">{skillMsg}</div>}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Skill Name *</label>
+                    <input value={skillForm.name} onChange={(e) => setSkillForm({ ...skillForm, name: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Description</label>
+                    <input value={skillForm.description} onChange={(e) => setSkillForm({ ...skillForm, description: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setShowSkillModal(false)} className="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs">Cancel</button>
+                  <button onClick={saveSkill} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+            {/* ── TAB 4: ABOUT ── */}
+      {activeTab === 'about' && (
+        <div className="space-y-6">
+          {/* Main App Identity Card */}
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white shadow-xl shadow-accent/25 ring-2 ring-accent/20 shrink-0">
+              <ShieldCheck className="w-9 h-9" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h3 className="text-xl font-extrabold text-white">Project Management System (PMS)</h3>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-accent-soft text-accent-light border border-accent/30">
+                  v1.0.0
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                A multi-role project governance and task tracking platform engineered in alignment with the <em>Pixel Addis Solution</em> specifications. Designed to coordinate workflows between Project Managers, Team Leaders, and Team Members with structured review and approval controls, live demo verification, and workspace metrics.
+              </p>
+            </div>
+          </div>
+
+          {/* System Specifications Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Application Name</span>
+              <p className="text-sm font-bold text-white mt-1">PMS Portal</p>
+                <p className="text-[11px] text-accent-light mt-0.5">Pixel Addis Solution</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Known Version</span>
+              <p className="text-sm font-bold text-white mt-1">v1.0.0 (Release 1)</p>
+              <p className="text-[11px] text-emerald-400 mt-0.5">Client Package 0.0.0</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Frontend Stack</span>
+              <p className="text-sm font-bold text-white mt-1">React 19 + TypeScript</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Vite & Tailwind CSS</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Storage Architecture</span>
+              <p className="text-sm font-bold text-white mt-1">In-Memory State</p>
+              <p className="text-[11px] text-emerald-400 mt-0.5">Zero Database / Ephemeral</p>
+            </div>
+          </div>
+
+          {/* Role Governance & Permissions Matrix */}
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <h4 className="text-base font-bold text-white mb-2">Role Permissions Matrix</h4>
+            <p className="text-xs text-slate-300 mb-4">
+              Governance rules ensuring appropriate separation of duties across all three roles.
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">System Capability</th>
+                    <th className="py-2.5 px-3 text-center">Project Manager</th>
+                    <th className="py-2.5 px-3 text-center">Team Leader</th>
+                    <th className="py-2.5 px-3 text-center">Team Member</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Create Projects & Assign Tasks</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Manage Team Members</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Execute Tasks & Post Comments</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Submit Formal Live Demo Evidence</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Review & Recommend Approval (TL)</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-indigo-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Grant Final Approval & Mark Completed</td>
+                    <td className="py-2.5 px-3 text-center text-accent-light font-bold">Exclusive Authority</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">Recommend Only</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-medium text-white">Configure Personal Profile & Notifications</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                    <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+

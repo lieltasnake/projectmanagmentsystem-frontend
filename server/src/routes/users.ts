@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { pool } from '../db';
@@ -7,13 +7,230 @@ import { authenticateToken, requirePM, AuthenticatedRequest } from '../middlewar
 const router = Router();
 
 // =========================================================================
-// Current User Endpoints (Accessible to any authenticated user)
+// Roles Catalog Endpoints (All authenticated users can manage)
 // =========================================================================
 
-/**
- * GET /api/users/me
- * Retrieves profile of the currently logged-in user.
- */
+router.get('/roles', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Sync current user's role into catalog if missing
+    if (req.user?.id) {
+      try {
+        const ur = await pool.query('SELECT role FROM users WHERE id = $1', [req.user!.id]);
+        if (ur.rows.length > 0 && ur.rows[0].role) {
+          await pool.query('INSERT INTO roles_catalog (name, description, is_system) VALUES ($1, $2, TRUE) ON CONFLICT (name) DO NOTHING', [ur.rows[0].role, 'Default role']);
+        }
+      } catch (e) {}
+    }
+    const result = await pool.query(
+      'SELECT id, name, description, is_system, created_at, updated_at FROM roles_catalog WHERE is_system = false OR name = (SELECT role FROM users WHERE id = $1) ORDER BY is_system DESC, id ASC',
+      [req.user!.id]
+    );
+    if (result.rows.length === 0 && req.user?.id) {
+       const ur = await pool.query('SELECT role FROM users WHERE id = $1', [req.user!.id]);
+      if (ur.rows.length > 0 && ur.rows[0].role) {
+        return res.status(200).json({ success: true, count: 1, roles: [{ id: 0, name: ur.rows[0].role, description: null, isSystem: true }] });
+      }
+    }
+    return res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      roles: result.rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        isSystem: Boolean(r.is_system),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })),
+    });
+  } catch (err: any) {
+    console.error('GET /api/users/roles error:', err.message);
+    try {
+      const userId = (req as AuthenticatedRequest).user?.id;
+      if (userId) {
+        const ur = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+        if (ur.rows.length > 0 && ur.rows[0].role) {
+          return res.status(200).json({ success: true, count: 1, roles: [{ id: 0, name: ur.rows[0].role, description: null, isSystem: true }] });
+        }
+      }
+    } catch (e) {}
+    return res.status(500).json({ success: false, error: 'Failed to retrieve roles.' });
+  }
+});
+router.post('/roles', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Role name is required.' });
+    }
+    const trimmedName = String(name).trim();
+    const dup = await pool.query('SELECT id FROM roles_catalog WHERE name ILIKE $1', [trimmedName]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ success: false, error: 'A role with this name already exists.' });
+    }
+const result = await pool.query(
+      'INSERT INTO roles_catalog (name, description) VALUES ($1, $2) RETURNING id, name, description, is_system, created_at, updated_at',
+      [trimmedName, description ? String(description).trim() : null]
+    );
+    const r = result.rows[0];
+    return res.status(201).json({
+      success: true,
+      message: 'Role created successfully.',
+      role: {
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        isSystem: Boolean(r.is_system),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('POST /api/users/roles error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to create role.' });
+  }
+});
+
+router.patch('/roles/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid role ID.' });
+    }
+    const { name, description } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Role name is required.' });
+    }
+    const trimmedName = String(name).trim();
+    const dup = await pool.query('SELECT id FROM roles_catalog WHERE name ILIKE $1 AND id != $2', [trimmedName, id]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ success: false, error: 'A role with this name already exists.' });
+    }
+const result = await pool.query(
+      'UPDATE roles_catalog SET name = $1, description = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING id, name, description, is_system, created_at, updated_at',
+      [trimmedName, description !== undefined ? (description ? String(description).trim() : null) : null, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Role not found.' });
+    }
+    const r = result.rows[0];
+    return res.status(200).json({
+      success: true,
+      message: 'Role updated successfully.',
+      role: {
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        isSystem: Boolean(r.is_system),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/users/roles/:id error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update role.' });
+  }
+});
+
+// =========================================================================
+// Skills Catalog Endpoints (All authenticated users can manage)
+// =========================================================================
+
+router.get('/skills', authenticateToken, async (_req: Request, res: Response) => {
+  try {
+    const result = await pool.query('SELECT id, name, description, is_system, created_at, updated_at FROM skills_catalog WHERE is_system = false ORDER BY id ASC');
+    return res.status(200).json({
+      success: true,
+      count: result.rows.length,
+      skills: result.rows.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        isSystem: Boolean(s.is_system),
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+      })),
+    });
+  } catch (err: any) {
+    console.error('GET /api/users/skills error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve skills.' });
+  }
+});
+router.post('/skills', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { name, description } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Skill name is required.' });
+    }
+    const trimmedName = String(name).trim();
+    const dup = await pool.query('SELECT id FROM skills_catalog WHERE name ILIKE $1', [trimmedName]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ success: false, error: 'A skill with this name already exists.' });
+    }
+const result = await pool.query(
+      'INSERT INTO skills_catalog (name, description) VALUES ($1, $2) RETURNING id, name, description, is_system, created_at, updated_at',
+      [trimmedName, description ? String(description).trim() : null]
+    );
+    const s = result.rows[0];
+    return res.status(201).json({
+      success: true,
+      message: 'Skill created successfully.',
+      skill: {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        isSystem: Boolean(s.is_system),
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('POST /api/users/skills error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to create skill.' });
+  }
+});
+
+router.patch('/skills/:id', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID.' });
+    }
+    const { name, description } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Skill name is required.' });
+    }
+    const trimmedName = String(name).trim();
+    const dup = await pool.query('SELECT id FROM skills_catalog WHERE name ILIKE $1 AND id != $2', [trimmedName, id]);
+    if (dup.rows.length > 0) {
+      return res.status(409).json({ success: false, error: 'A skill with this name already exists.' });
+    }
+    const result = await pool.query(
+      'UPDATE skills_catalog SET name = $1, description = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING id, name, description, is_system, created_at, updated_at',
+      [trimmedName, description !== undefined ? (description ? String(description).trim() : null) : null, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Skill not found.' });
+    }
+    const s = result.rows[0];
+    return res.status(200).json({
+      success: true,
+      message: 'Skill updated successfully.',
+      skill: {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        isSystem: Boolean(s.is_system),
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+      },
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/users/skills/:id error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update skill.' });
+  }
+});
+
 router.get('/me', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -619,3 +836,12 @@ router.post('/:id/reset-password', authenticateToken, requirePM, async (req: Req
 });
 
 export default router;
+
+
+
+
+
+
+
+
+

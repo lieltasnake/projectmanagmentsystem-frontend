@@ -1,0 +1,35 @@
+﻿import React, { useState, useEffect } from 'react';
+import {
+  User,
+  Palette,
+  Bell,
+  Info,
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  Moon,
+  Sun,
+  AlertCircle,
+  Sparkles,
+  Check,
+  RotateCcw,
+  Clock,
+  Send,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Users,
+  Award,
+  Plus,
+  X,
+  Edit2,
+} from 'lucide-react';
+import { updateMyProfile, changeMyPassword, getRoles, createRole, updateRole, getSkills, createSkill, updateSkill } from '../services/api';
+import type {
+  UserProfile,
+  UserRole,
+  NotificationPreferences,
+  AppearanceSettings,
+  Task,
+  Project,
+} from '../types/pms';

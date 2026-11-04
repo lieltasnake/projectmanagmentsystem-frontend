@@ -14,6 +14,13 @@ export default {
           800: '#141e4b',
           700: '#1e2d6d',
         },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          hover: 'var(--accent-hover)',
+          light: 'var(--accent-light)',
+          soft: 'var(--accent-soft)',
+          text: 'var(--accent-text)',
+        },
       },
     },
   },

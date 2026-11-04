@@ -1,0 +1,1 @@
+﻿// Ensure logged-in user's role is present in catalog

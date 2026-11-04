@@ -1,0 +1,459 @@
+﻿DashboardLayout.tsx:159:accentColor: 'purple',
+DashboardLayout.tsx:836:<div className="relative overflow-hidden rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl transition-all duration-300 hover:border-emerald-500/50 hover:shadow-emerald-500/10 group">
+DashboardLayout.tsx:841:<div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+DashboardLayout.tsx:849:<div className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-300">
+DashboardLayout.tsx:850:<ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+DashboardLayout.tsx:984:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+DashboardLayout.tsx:1054:<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+DashboardLayout.tsx:1119:? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+DashboardLayout.tsx:1124:: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
+DashboardLayout.tsx:1258:<div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+DashboardLayout.tsx:1323:{/* Avatar with purple gradient border */}
+NotificationsPage.tsx:54:<div className={`${base} bg-indigo-500/15 border border-indigo-500/30`}>
+NotificationsPage.tsx:55:<ShieldCheck className="w-5 h-5 text-indigo-400" />
+NotificationsPage.tsx:61:<div className={`${base} bg-emerald-500/15 border border-emerald-500/30`}>
+NotificationsPage.tsx:62:<CheckCircle2 className="w-5 h-5 text-emerald-400" />
+NotificationsPage.tsx:68:<div className={`${base} bg-purple-500/15 border border-purple-500/30`}>
+NotificationsPage.tsx:69:<Send className="w-5 h-5 text-purple-400" />
+NotificationsPage.tsx:77:<div className={`${base} bg-emerald-500/15 border border-emerald-500/30`}>
+NotificationsPage.tsx:78:<CheckCircle2 className="w-5 h-5 text-emerald-400" />
+NotificationsPage.tsx:95:<div className={`${base} bg-purple-500/15 border border-purple-500/30`}>
+NotificationsPage.tsx:96:<Info className="w-5 h-5 text-purple-400" />
+NotificationsPage.tsx:106:if (id.startsWith('notif-tl-recommended')) return { label: 'TL Review', cls: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' };
+NotificationsPage.tsx:107:if (id.startsWith('notif-completed')) return { label: 'Completed', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
+NotificationsPage.tsx:108:if (id.startsWith('notif-review')) return { label: 'Review', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+NotificationsPage.tsx:110:case 'success': return { label: 'Success', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
+NotificationsPage.tsx:113:default: return { label: 'Info', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+NotificationsPage.tsx:144:<span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+NotificationsPage.tsx:149:<span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+NotificationsPage.tsx:165:className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-purple-300 bg-slate-900/60 border border-slate-700 hover:text-white hover:border-slate-600 transition-colors cursor-pointer"
+NotificationsPage.tsx:188:? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/20'
+NotificationsPage.tsx:201:<div className="w-16 h-16 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4 shadow-lg shadow-purple-500/10">
+NotificationsPage.tsx:213:<div className="w-12 h-12 rounded-2xl bg-emerald-600/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3">
+NotificationsPage.tsx:231:: 'bg-[#0f173b]/90 border-slate-700/60 hover:border-purple-500/30 shadow-lg shadow-black/20'
+NotificationsPage.tsx:236:<span className="absolute top-4 right-4 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-[#0f173b]" />
+NotificationsPage.tsx:249:<span className="text-[10px] font-semibold text-purple-400">NEW</span>
+ProjectDetailsPage.tsx:58:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+ProjectDetailsPage.tsx:65:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+ProjectDetailsPage.tsx:72:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+ProjectDetailsPage.tsx:119:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+ProjectDetailsPage.tsx:134:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+ProjectDetailsPage.tsx:142:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+ProjectDetailsPage.tsx:517:<CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+ProjectDetailsPage.tsx:528:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+ProjectDetailsPage.tsx:573:{ label: 'In Progress', value: taskStats.inProgress, color: 'text-indigo-300', bg: 'bg-indigo-500/15 border-indigo-500/30' },
+ProjectDetailsPage.tsx:575:{ label: 'Completed', value: taskStats.completed, color: 'text-emerald-300', bg: 'bg-emerald-500/15 border-emerald-500/30' },
+ProjectDetailsPage.tsx:772:<span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+ProjectDetailsPage.tsx:784:<span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.2 rounded border border-emerald-500/30">
+ProjectDetailsPage.tsx:790:<span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+ProjectDetailsPage.tsx:813:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+ProjectDetailsPage.tsx:851:? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+ProjectDetailsPage.tsx:928:? 'border-purple-500 ring-2 ring-purple-500/30 bg-[#141d4b]'
+ProjectDetailsPage.tsx:1048:: 'bg-gradient-to-tr from-purple-600 to-indigo-500 shadow-purple-500/20'
+ProjectsPage.tsx:505:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+ProjectsPage.tsx:506:<CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+ProjectsPage.tsx:512:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+ProjectsPage.tsx:513:<Clock className="w-3.5 h-3.5 text-indigo-400" />
+ProjectsPage.tsx:519:<span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+ProjectsPage.tsx:520:<Layers className="w-3.5 h-3.5 text-purple-400" />
+ProjectsPage.tsx:747:<ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
+ProjectsPage.tsx:748:<span className="text-[10px] text-indigo-300 font-medium">TL:</span>
+ProjectsPage.tsx:755:<Users className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+ProjectsPage.tsx:756:<span className="text-[10px] text-emerald-300 font-medium shrink-0">Team:</span>
+ProjectsPage.tsx:780:<Clock className="w-3 h-3 text-purple-400" />
+ProjectsPage.tsx:797:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+ProjectsPage.tsx:808:<span className="text-emerald-400 text-[10px] font-medium">Verified by PM</span>
+ProjectsPage.tsx:870:<ShieldCheck className="w-3 h-3 text-indigo-400 shrink-0" />
+ProjectsPage.tsx:871:<span className="text-indigo-300">{userLookup.get(String(project.teamLeaderId))?.name ?? 'â€”'}</span>
+ProjectsPage.tsx:876:<Users className="w-3 h-3 text-emerald-400 shrink-0" />
+ProjectsPage.tsx:910:? 'bg-emerald-400'
+ProjectsPage.tsx:934:<span className="text-[11px] text-purple-400 font-medium">
+ProjectsPage.tsx:1141:? 'bg-purple-600/30 text-white font-semibold border border-purple-500/40'
+ProjectsPage.tsx:1152:<span className="text-[9px] text-emerald-400 font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+ProjectsPage.tsx:1305:<span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
+ProjectsPage.tsx:1329:className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+ProjectsPage.tsx:1386:className="accent-purple-500 w-3.5 h-3.5 rounded shrink-0 cursor-pointer"
+ProjectsPage.tsx:1388:<div className="w-6 h-6 rounded-md bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+ProjectsPage.tsx:1443:? 'bg-emerald-600 text-white'
+ReportsPage.tsx:27:purple: {
+ReportsPage.tsx:28:cardBg: 'bg-purple-950/20 border-purple-500/20 hover:border-purple-500/40',
+ReportsPage.tsx:29:iconBg: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+ReportsPage.tsx:30:text: 'text-purple-400',
+ReportsPage.tsx:31:subText: 'text-purple-300/70',
+ReportsPage.tsx:39:emerald: {
+ReportsPage.tsx:40:cardBg: 'bg-emerald-950/20 border-emerald-500/20 hover:border-emerald-500/40',
+ReportsPage.tsx:41:iconBg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+ReportsPage.tsx:42:text: 'text-emerald-400',
+ReportsPage.tsx:43:subText: 'text-emerald-300/70',
+ReportsPage.tsx:165:<BarChart3 className="w-8 h-8 text-purple-400" />
+ReportsPage.tsx:176:<Filter className="w-4 h-4 text-purple-400 shrink-0" />
+ReportsPage.tsx:232:<div className="w-16 h-16 rounded-2xl bg-purple-600/15 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4 shadow-lg shadow-purple-950/40">
+ReportsPage.tsx:249:theme="purple"
+ReportsPage.tsx:263:theme="emerald"
+ReportsPage.tsx:301:<span className="text-xs font-semibold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+ReportsPage.tsx:316:<span className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-300 to-emerald-400">
+ReportsPage.tsx:326:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+ReportsPage.tsx:327:: 'bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-500'
+ReportsPage.tsx:339:<Layers className="w-5 h-5 text-purple-400" />
+ReportsPage.tsx:382:? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+ReportsPage.tsx:430:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+ReportsPage.tsx:431:: 'bg-gradient-to-r from-purple-500 to-indigo-500'
+ReportsPage.tsx:442:<span className="bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-500/20 font-medium">
+ReportsPage.tsx:443:Completed: <strong className="text-emerald-400">{pCompleted}</strong>
+ReportsPage.tsx:473:<CheckSquare className="w-5 h-5 text-purple-400" />
+ReportsPage.tsx:494:<strong className="text-purple-300">{selectedStatus}</strong>
+ReportsPage.tsx:508:className="text-xs text-purple-400 hover:text-purple-300 underline font-medium"
+ReportsPage.tsx:572:? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+ReportsPage.tsx:581:<CheckCircle2 className="w-3 h-3 text-emerald-400" />
+SettingsPage.tsx:465:<div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+SettingsPage.tsx:466:<CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+SettingsPage.tsx:481:<div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-400 flex items-center justify-center text-white text-3xl font-extrabold shadow-xl shadow-purple-500/20 ring-4 ring-purple-500/20 mb-4">
+SettingsPage.tsx:487:<div className="mt-4 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center gap-1.5">
+SettingsPage.tsx:488:<ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+SettingsPage.tsx:499:<span className="font-medium text-emerald-400">
+SettingsPage.tsx:537:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+SettingsPage.tsx:553:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+SettingsPage.tsx:651:<div className="mb-4 p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+SettingsPage.tsx:652:<CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400" />
+SettingsPage.tsx:676:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+SettingsPage.tsx:700:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500 pr-10"
+SettingsPage.tsx:723:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+SettingsPage.tsx:783:? 'border-purple-500 bg-[#070b19] shadow-xl shadow-purple-500/10'
+SettingsPage.tsx:788:<div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white">
+SettingsPage.tsx:802:High-contrast deep navy and indigo aesthetic. Calibrated for long project governance sessions and eye comfort.
+SettingsPage.tsx:807:<div className="w-3 h-3 rounded bg-purple-600" />
+SettingsPage.tsx:818:? 'border-purple-500 bg-slate-900 shadow-xl shadow-purple-500/10'
+SettingsPage.tsx:823:<div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white">
+SettingsPage.tsx:858:{ id: 'purple', label: 'Vibrant Purple (Default)', class: 'bg-purple-600' },
+SettingsPage.tsx:859:{ id: 'indigo', label: 'Electric Indigo', class: 'bg-indigo-600' },
+SettingsPage.tsx:860:{ id: 'emerald', label: 'Emerald Green', class: 'bg-emerald-600' },
+SettingsPage.tsx:1000:<div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+SettingsPage.tsx:1006:<span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
+SettingsPage.tsx:1068:<div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+SettingsPage.tsx:1074:<span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
+SettingsPage.tsx:1130:<div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+SettingsPage.tsx:1184:{roleMsg && <div className="mb-3 text-xs text-emerald-300">{roleMsg}</div>}
+SettingsPage.tsx:1197:<button onClick={saveRole} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+SettingsPage.tsx:1217:className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-2"
+SettingsPage.tsx:1224:<div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+SettingsPage.tsx:1278:{skillMsg && <div className="mb-3 text-xs text-emerald-300">{skillMsg}</div>}
+SettingsPage.tsx:1291:<button onClick={saveSkill} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+SettingsPage.tsx:1331:<p className="text-[11px] text-emerald-400 mt-0.5">Client Package 0.0.0</p>
+SettingsPage.tsx:1343:<p className="text-[11px] text-emerald-400 mt-0.5">Zero Database / Ephemeral</p>
+SettingsPage.tsx:1367:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1373:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1379:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1380:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1381:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1387:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1392:<td className="py-2.5 px-3 text-center text-indigo-400 font-bold">Yes</td>
+SettingsPage.tsx:1403:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1404:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+SettingsPage.tsx:1405:<td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
+TaskReviewModal.tsx:144:return <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />;
+TaskReviewModal.tsx:147:return <Film className="w-4 h-4 text-purple-400 shrink-0" />;
+TaskReviewModal.tsx:600:<span className="text-[10px] font-mono text-purple-300/90 px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 font-semibold">
+TaskReviewModal.tsx:624:<User className="w-4 h-4 text-purple-400 shrink-0" />
+TaskReviewModal.tsx:629:<span className="text-[11px] px-2 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 font-semibold">
+TaskReviewModal.tsx:640:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:647:<span className="w-2 h-2 rounded-full bg-emerald-400" title="Demo Attached" />
+TaskReviewModal.tsx:655:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:662:<span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+TaskReviewModal.tsx:672:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:682:: 'bg-slate-800 text-emerald-400 border border-emerald-500/30'
+TaskReviewModal.tsx:694:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:701:<span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+TaskReviewModal.tsx:711:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:718:<span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 text-purple-300 border border-purple-500/30">
+TaskReviewModal.tsx:728:? 'border-purple-500 text-purple-300 bg-purple-500/10'
+TaskReviewModal.tsx:762:{task.status === 'Completed' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+TaskReviewModal.tsx:764:{task.status === 'In Progress' && <Clock className="w-4 h-4 text-indigo-400" />}
+TaskReviewModal.tsx:770:{String(task.status) === 'Ready for Approval' && <ShieldCheck className="w-4 h-4 text-indigo-400" />}
+TaskReviewModal.tsx:789:className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500"
+TaskReviewModal.tsx:825:className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500"
+TaskReviewModal.tsx:847:className={`font-semibold ${task.tlRecommendation === 'recommended' ? 'text-indigo-300' : 'text-amber-300'
+TaskReviewModal.tsx:872:<CheckSquare className="w-4 h-4 text-purple-400" />
+TaskReviewModal.tsx:877:className="text-[11px] text-purple-400 hover:text-purple-300 font-medium cursor-pointer"
+TaskReviewModal.tsx:886:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+TaskReviewModal.tsx:887:: 'bg-gradient-to-r from-purple-500 to-indigo-500'
+TaskReviewModal.tsx:901:? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+TaskReviewModal.tsx:902:: 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+TaskReviewModal.tsx:919:<div className="p-4 rounded-xl bg-gradient-to-b from-[#131b44] to-[#0d1435] border border-indigo-500/30 shadow-lg space-y-3">
+TaskReviewModal.tsx:922:<FileCheck className="w-5 h-5 text-emerald-400" />
+TaskReviewModal.tsx:933:<span className="text-[10px] text-purple-300 uppercase tracking-wider font-semibold block">
+TaskReviewModal.tsx:944:className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer shrink-0"
+TaskReviewModal.tsx:965:<ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+TaskReviewModal.tsx:972:className="group relative rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 aspect-video flex items-center justify-center cursor-pointer hover:border-purple-500 transition-colors"
+TaskReviewModal.tsx:997:<Film className="w-3.5 h-3.5 text-purple-400" />
+TaskReviewModal.tsx:1050:className="p-4 rounded-xl bg-[#0d1435] border border-purple-500/40 shadow-xl space-y-3.5"
+TaskReviewModal.tsx:1054:<Send className="w-4 h-4 text-purple-400" />
+TaskReviewModal.tsx:1081:<label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+TaskReviewModal.tsx:1107:Live Demo URL <span className={demoZipFile ? 'text-slate-400' : 'text-purple-400'}>{demoZipFile ? '' : ' *'}</span>
+TaskReviewModal.tsx:1116:className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
+TaskReviewModal.tsx:1123:Completion Summary / Description <span className="text-purple-400">*</span>
+TaskReviewModal.tsx:1132:className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+TaskReviewModal.tsx:1144:<label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+TaskReviewModal.tsx:1183:<Film className="w-4 h-4 text-purple-400 shrink-0" />
+TaskReviewModal.tsx:1196:<label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+TaskReviewModal.tsx:1217:<label className="border border-dashed border-slate-700 hover:border-purple-500/60 rounded-xl p-3 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors">
+TaskReviewModal.tsx:1251:className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+TaskReviewModal.tsx:1279:className="w-full p-2.5 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+TaskReviewModal.tsx:1288:<div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+TaskReviewModal.tsx:1289:<CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+TaskReviewModal.tsx:1300:className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+TaskReviewModal.tsx:1362:className="py-2.5 px-3 rounded-xl font-semibold text-xs text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+TaskReviewModal.tsx:1386:className="py-2.5 px-3 rounded-xl font-semibold text-xs text-indigo-100 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+TaskReviewModal.tsx:1438:className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+TaskReviewModal.tsx:1473:className="py-2.5 px-3 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+TaskReviewModal.tsx:1515:<CheckSquare className="w-4 h-4 text-purple-400" />
+TaskReviewModal.tsx:1518:<span className="font-semibold text-purple-300">
+TaskReviewModal.tsx:1528:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+TaskReviewModal.tsx:1529:: 'bg-gradient-to-r from-purple-500 to-indigo-500'
+TaskReviewModal.tsx:1542:<div className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs flex items-center gap-2">
+TaskReviewModal.tsx:1543:<CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+TaskReviewModal.tsx:1557:className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/25 cursor-pointer"
+TaskReviewModal.tsx:1605:? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/30'
+TaskReviewModal.tsx:1606:: 'border-2 border-slate-600 hover:border-purple-500 bg-slate-800/60'
+TaskReviewModal.tsx:1625:className="w-full px-2.5 py-1 text-xs rounded-lg bg-slate-800 border border-purple-500 text-white focus:outline-none"
+TaskReviewModal.tsx:1630:className="p-1 rounded text-emerald-400 hover:text-emerald-300 hover:bg-slate-800 cursor-pointer"
+TaskReviewModal.tsx:1832:? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+TaskReviewModal.tsx:1856:<div className="p-2 rounded bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 text-[11px]">
+TaskReviewModal.tsx:1879:className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white"
+TaskReviewModal.tsx:1930:className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+TaskReviewModal.tsx:1958:className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+TaskReviewModal.tsx:2008:className="w-full p-3 rounded-xl bg-slate-900/90 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none pr-24"
+TaskReviewModal.tsx:2012:className="absolute bottom-2.5 right-2.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors flex items-center gap-1 cursor-pointer shadow-md"
+TaskReviewModal.tsx:2038:<div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[9px] flex items-center justify-center">
+TaskReviewModal.tsx:2042:<span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+TaskReviewModal.tsx:2065:<label className="border-2 border-dashed border-slate-700 hover:border-purple-500/70 rounded-xl p-5 flex flex-col items-center justify-center bg-slate-900/50 cursor-pointer transition-colors group">
+TaskReviewModal.tsx:2066:<Upload className="w-6 h-6 text-purple-400 mb-2 group-hover:scale-110 transition-transform" />
+TaskReviewModal.tsx:2167:<span className="font-semibold text-purple-300">
+TaskReviewModal.tsx:2174:<span className="text-indigo-300 flex items-center gap-1">
+TaskReviewModal.tsx:2184:<span className="text-purple-300 flex items-center gap-1">
+TaskReviewModal.tsx:2189:<span className="text-emerald-300 flex items-center gap-1">
+TasksPage.tsx:173:color: 'text-indigo-300',
+TasksPage.tsx:175:badgeBg: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+TasksPage.tsx:177:border: 'border-indigo-500/50',
+TasksPage.tsx:179:dot: 'bg-indigo-400',
+TasksPage.tsx:201:color: 'text-emerald-300',
+TasksPage.tsx:203:badgeBg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+TasksPage.tsx:205:border: 'border-emerald-500/50',
+TasksPage.tsx:207:dot: 'bg-emerald-400',
+TasksPage.tsx:243:color: 'text-indigo-300',
+TasksPage.tsx:245:badgeBg: 'bg-indigo-700/30 text-indigo-300 border-indigo-600/40',
+TasksPage.tsx:247:border: 'border-indigo-700/80',
+TasksPage.tsx:249:dot: 'bg-indigo-400',
+TasksPage.tsx:321:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+TasksPage.tsx:351:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+TasksPage.tsx:395:<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+TasksPage.tsx:1572:<span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+TasksPage.tsx:1606:? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+TasksPage.tsx:1640:? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+TasksPage.tsx:1678:className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 disabled:opacity-60 disabled:cursor-not-allowed transition-all cursor-pointer"
+TasksPage.tsx:1770:className="w-full pl-10 pr-9 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TasksPage.tsx:1804:<FolderKanban className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+TasksPage.tsx:1838:<SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+TasksPage.tsx:1906:<User className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+TasksPage.tsx:1958:className="bg-transparent text-xs text-purple-300 focus:outline-none cursor-pointer font-medium"
+TasksPage.tsx:1986:{sortOrder === 'asc' ? <ArrowUp className="w-3.5 h-3.5 text-purple-400" /> : <ArrowDown className="w-3.5 h-3.5 text-purple-400" />}
+TasksPage.tsx:2002:className="text-xs text-purple-400 hover:text-purple-300 underline font-medium cursor-pointer"
+TasksPage.tsx:2036:<div className="w-16 h-16 rounded-2xl bg-indigo-600/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-4 shadow-lg shadow-indigo-500/10">
+TasksPage.tsx:2060:<div className="w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3">
+TasksPage.tsx:2080:className="mt-3 px-3 py-1.5 rounded-lg text-xs bg-purple-600/20 text-purple-300 border border-purple-500/30 hover:bg-purple-600/30 cursor-pointer"
+TasksPage.tsx:2196:className="flex items-center gap-1 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer"
+TasksPage.tsx:2214:<div className="p-3 bg-purple-950/20 border-b border-purple-500/30 flex flex-wrap items-center gap-2">
+TasksPage.tsx:2236:className="flex-1 min-w-[200px] px-3 py-1.5 rounded-lg bg-slate-900 border border-purple-500/60 text-xs text-white placeholder-slate-500 focus:outline-none"
+TasksPage.tsx:2270:className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-semibold hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 cursor-pointer"
+TasksPage.tsx:2400:className="w-full px-2 py-1 text-xs rounded bg-slate-900 border border-purple-500 text-white focus:outline-none"
+TasksPage.tsx:2410:className="p-1 rounded text-emerald-400 hover:bg-slate-800"
+TasksPage.tsx:2484:<span className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30">
+TasksPage.tsx:2512:<span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.2 rounded border border-emerald-500/30">
+TasksPage.tsx:2546:className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-300 bg-purple-500/15 px-1.5 py-0.2 rounded border border-purple-500/30 hover:bg-purple-500/25 transition-colors cursor-pointer"
+TasksPage.tsx:2588:<CheckSquare className="w-3 h-3 text-purple-400" />
+TasksPage.tsx:2598:<span className="font-mono text-purple-300 font-bold">
+TasksPage.tsx:2614:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+TasksPage.tsx:2616:: 'bg-gradient-to-r from-purple-500 to-indigo-500'
+TasksPage.tsx:2664:? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+TasksPage.tsx:2666:: 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+TasksPage.tsx:2752:className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-400 hover:text-purple-300 cursor-pointer"
+TasksPage.tsx:2771:<div className="mt-1 text-[10px] text-purple-300/80 line-clamp-1 italic">
+TasksPage.tsx:2805:<FolderKanban className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+TasksPage.tsx:2807:<span className="text-purple-300 group-hover:text-purple-200 group-hover:underline transition-colors font-medium">
+TasksPage.tsx:2863:<div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[9px] flex items-center justify-center shrink-0">
+TasksPage.tsx:2933:<Calendar className="w-3 h-3 text-purple-400" />
+TasksPage.tsx:3015:className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 transition-all cursor-pointer inline-flex items-center gap-1.5"
+TasksPage.tsx:3097:<FolderKanban className="w-4 h-4 text-purple-400" />
+TasksPage.tsx:3203:? 'border-purple-500 ring-2 ring-purple-500/30 bg-[#141d4b]'
+TasksPage.tsx:3255:className="p-1 rounded text-purple-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+TasksPage.tsx:3273:<div className="p-3 bg-purple-950/30 border-b border-purple-500/40 space-y-2">
+TasksPage.tsx:3295:className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-purple-500/60 text-xs text-white placeholder-slate-500 focus:outline-none"
+TasksPage.tsx:3309:className="px-2.5 py-1 rounded bg-purple-600 text-white text-[11px] font-semibold hover:bg-purple-500 disabled:opacity-50 cursor-pointer"
+TasksPage.tsx:3387:className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-700/70 hover:border-purple-500/60 shadow-md space-y-2.5 transition-all cursor-grab active:cursor-grabbing group hover:shadow-purple-500/10"
+TasksPage.tsx:3397:<span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 truncate max-w-[150px]">
+TasksPage.tsx:3445:<span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+TasksPage.tsx:3509:<CheckSquare className="w-3 h-3 text-purple-400" />
+TasksPage.tsx:3529:<span className="font-mono text-purple-300 font-bold text-[10px]">
+TasksPage.tsx:3547:? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+TasksPage.tsx:3549:: 'bg-gradient-to-r from-purple-500 to-indigo-500'
+TasksPage.tsx:3601:? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+TasksPage.tsx:3603:: 'border-slate-700 bg-slate-800 text-transparent hover:border-purple-500'
+TasksPage.tsx:3648:className="flex items-center gap-1 text-[10px] font-semibold text-purple-400 hover:text-purple-300 cursor-pointer pt-0.5"
+TasksPage.tsx:3673:<div className="w-5 h-5 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-[8px] flex items-center justify-center shrink-0">
+TasksPage.tsx:3705:<Calendar className="w-2.5 h-2.5 text-purple-400" />
+TasksPage.tsx:3719:className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-600/20 hover:bg-purple-600/35 text-purple-300 border border-purple-500/30 transition-all cursor-pointer"
+TasksPage.tsx:3809:<div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25">
+TasksPage.tsx:3827:<div className="mt-2 p-1.5 rounded-lg bg-purple-950/60 border border-purple-500/40 text-purple-200 text-[11px] flex items-start gap-1.5">
+TasksPage.tsx:3828:<ShieldCheck className="w-3 h-3 text-purple-400 shrink-0 mt-0.5" />
+TasksPage.tsx:3841:{isSubtaskMode ? 'Subtask Title' : 'Task Title'} <span className="text-purple-400">*</span>
+TasksPage.tsx:3856:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TasksPage.tsx:3881:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80 resize-none"
+TasksPage.tsx:3893:Project <span className="text-purple-400">*</span>
+TasksPage.tsx:3915:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+TasksPage.tsx:3956:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TasksPage.tsx:3997:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TasksPage.tsx:4040:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TasksPage.tsx:4079:className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TasksPage.tsx:4097:className="px-3 py-1 rounded-lg text-[11px] font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-600/30 transition-all cursor-pointer"
+TeamPage.tsx:420:<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+TeamPage.tsx:421:<ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+TeamPage.tsx:428:<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+TeamPage.tsx:429:<Shield className="w-3.5 h-3.5 text-indigo-400" />
+TeamPage.tsx:459:<span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30">
+TeamPage.tsx:463:<span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+TeamPage.tsx:484:<RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+TeamPage.tsx:489:className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg shadow-purple-600/25 active:scale-[0.99] transition-all cursor-pointer shrink-0"
+TeamPage.tsx:500:<div className="p-4 rounded-xl bg-purple-950/70 border border-purple-500/40 text-purple-200 text-sm flex items-start gap-3 animate-fadeIn">
+TeamPage.tsx:501:<CheckCircle2 className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+TeamPage.tsx:524:className="w-full pl-10 pr-4 py-2 bg-[#0a0f26]/80 text-white placeholder-slate-500 text-sm rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 focus:border-transparent transition-all"
+TeamPage.tsx:532:className="px-3 py-2 bg-[#0a0f26]/80 text-white text-xs rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TeamPage.tsx:545:className="px-3 py-2 bg-[#0a0f26]/80 text-white text-xs rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TeamPage.tsx:560:className="px-3 py-2 bg-[#0a0f26]/80 text-white text-xs rounded-xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TeamPage.tsx:607:<div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-xs flex items-center justify-center shadow-md ring-1 ring-purple-500/30 shrink-0">
+TeamPage.tsx:614:<span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+TeamPage.tsx:635:<Building className="w-3.5 h-3.5 text-purple-400" />
+TeamPage.tsx:643:<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+TeamPage.tsx:644:<CheckCircle2 className="w-3 h-3 text-emerald-400" />
+TeamPage.tsx:700:: 'text-slate-300 hover:text-emerald-400 hover:bg-emerald-950/40'
+TeamPage.tsx:713:<CheckCircle2 className="w-4 h-4 text-emerald-400" />
+TeamPage.tsx:736:className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 shadow-xl p-5 flex flex-col justify-between transition-all duration-300 hover:border-purple-500/40"
+TeamPage.tsx:742:<span className="text-[11px] text-purple-300/80 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800">
+TeamPage.tsx:749:<div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-bold text-base flex items-center justify-center shadow-md shadow-purple-500/20 ring-1 ring-purple-500/30 shrink-0">
+TeamPage.tsx:765:<CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+TeamPage.tsx:784:<div className="relative w-full max-w-lg bg-[#0f173b] border border-purple-500/40 rounded-2xl p-6 shadow-2xl my-8">
+TeamPage.tsx:787:<div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
+TeamPage.tsx:823:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+TeamPage.tsx:838:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+TeamPage.tsx:851:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:870:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+TeamPage.tsx:884:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+TeamPage.tsx:900:className="text-[11px] text-purple-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer"
+TeamPage.tsx:913:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-purple-500"
+TeamPage.tsx:933:className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg cursor-pointer disabled:opacity-50"
+TeamPage.tsx:948:<div className="relative w-full max-w-lg bg-[#0f173b] border border-purple-500/40 rounded-2xl p-6 shadow-2xl my-8">
+TeamPage.tsx:951:<div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md">
+TeamPage.tsx:983:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:994:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:1004:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:1019:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:1031:className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white focus:outline-none focus:border-purple-500"
+TeamPage.tsx:1050:className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-lg cursor-pointer disabled:opacity-50"
+TeamPage.tsx:1094:<div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-sm">
+TeamPage.tsx:1095:<div className="font-bold flex items-center gap-2 mb-1 text-emerald-300">
+TeamPage.tsx:1096:<CheckCircle2 className="w-4 h-4 text-emerald-400" />
+TeamPage.tsx:1108:className="p-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/60 text-purple-300 flex items-center gap-1 text-xs cursor-pointer"
+TeamPage.tsx:1110:{copiedPass ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+TeamPage.tsx:1189:: 'bg-gradient-to-tr from-emerald-600 to-green-500'
+TeamPage.tsx:1206:<span className="block mt-2 text-xs text-emerald-400">
+TeamPage.tsx:1232:: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+TestingDashboardPage.tsx:114:<span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+TestingDashboardPage.tsx:115:<User className="w-3 h-3 text-indigo-400" />
+TestingDashboardPage.tsx:121:<span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+TestingDashboardPage.tsx:122:<Clock className="w-3 h-3 text-purple-400" />
+TestingDashboardPage.tsx:142:<span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+TestingDashboardPage.tsx:143:<CheckCheck className="w-3 h-3 text-emerald-400" />
+TestingDashboardPage.tsx:162:return <ImageIcon className="w-4 h-4 text-emerald-400 shrink-0" />;
+TestingDashboardPage.tsx:434:? 'border-purple-500 shadow-lg shadow-purple-500/10'
+TestingDashboardPage.tsx:440:<TestTube className="w-4 h-4 text-purple-400" />
+TestingDashboardPage.tsx:445:<div className="text-[10px] text-purple-300 mt-0.5">Tasks submitted</div>
+TestingDashboardPage.tsx:453:? 'border-indigo-500 shadow-lg shadow-indigo-500/10'
+TestingDashboardPage.tsx:459:<Bug className="w-4 h-4 text-indigo-400" />
+TestingDashboardPage.tsx:464:<div className="text-[10px] text-indigo-300 mt-0.5">Linked to tasks</div>
+TestingDashboardPage.tsx:514:<CheckCheck className="w-4 h-4 text-emerald-400" />
+TestingDashboardPage.tsx:516:<div className="mt-2 text-2xl font-extrabold text-emerald-400">
+TestingDashboardPage.tsx:519:<div className="text-[10px] text-emerald-300/80 mt-0.5">QA confirmed</div>
+TestingDashboardPage.tsx:548:? 'bg-purple-600 text-white shadow-md shadow-purple-600/25'
+TestingDashboardPage.tsx:566:? 'bg-purple-600 text-white shadow-md shadow-purple-600/25'
+TestingDashboardPage.tsx:584:? 'bg-purple-600 text-white shadow-md shadow-purple-600/25'
+TestingDashboardPage.tsx:608:className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:618:className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TestingDashboardPage.tsx:633:className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TestingDashboardPage.tsx:649:className="px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/80 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80 cursor-pointer"
+TestingDashboardPage.tsx:682:<div className="p-3.5 rounded-xl bg-purple-950/40 border border-purple-500/30 text-xs text-purple-200 flex items-center justify-between">
+TestingDashboardPage.tsx:684:<Info className="w-4 h-4 text-purple-400 shrink-0" />
+TestingDashboardPage.tsx:689:<span className="font-semibold text-purple-300 shrink-0 ml-3">
+TestingDashboardPage.tsx:696:<div className="w-14 h-14 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-3">
+TestingDashboardPage.tsx:716:className="p-5 rounded-2xl bg-[#0f173b]/90 border border-slate-700/80 hover:border-purple-500/40 shadow-xl transition-all space-y-4"
+TestingDashboardPage.tsx:722:<span className="text-[10px] font-mono text-purple-300 font-bold px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/30">
+TestingDashboardPage.tsx:750:<User className="w-3.5 h-3.5 text-purple-400" />
+TestingDashboardPage.tsx:764:<span className="font-semibold text-purple-300">
+TestingDashboardPage.tsx:770:className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all"
+TestingDashboardPage.tsx:782:<ExternalLink className="w-3.5 h-3.5 text-purple-400" />
+TestingDashboardPage.tsx:789:className="text-purple-400 hover:text-purple-300 underline font-mono text-[11px] truncate max-w-[200px]"
+TestingDashboardPage.tsx:831:className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+TestingDashboardPage.tsx:900:<div className="text-purple-300/80 text-[10px] truncate mt-0.5">
+TestingDashboardPage.tsx:916:<User className="w-3 h-3 text-purple-400 shrink-0" />
+TestingDashboardPage.tsx:929:<Eye className="w-3.5 h-3.5 text-purple-400" />
+TestingDashboardPage.tsx:938:className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer"
+TestingDashboardPage.tsx:970:className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors cursor-pointer"
+TestingDashboardPage.tsx:1041:<div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-emerald-300">
+TestingDashboardPage.tsx:1092:className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/25 transition-colors cursor-pointer"
+TestingDashboardPage.tsx:1377:className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:1395:className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:1416:className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:1432:className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:1466:className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80"
+TestingDashboardPage.tsx:1481:className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/80 font-mono text-[11px]"
+TestingDashboardPage.tsx:1489:<label className="inline-flex items-center gap-1.5 text-purple-400 hover:text-purple-300 font-semibold cursor-pointer">
+TestingDashboardPage.tsx:1622:<User className="w-4 h-4 text-purple-400" />
+TestingDashboardPage.tsx:1633:className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-purple-600/20 text-purple-300 hover:bg-purple-600/30 border border-purple-500/30 transition-colors cursor-pointer"
+TestingDashboardPage.tsx:1659:className="px-2 py-1 rounded-lg text-[11px] bg-purple-600 text-white font-semibold"
+TestingDashboardPage.tsx:1685:<div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 font-mono text-[11px] text-purple-200/90 leading-relaxed whitespace-pre-wrap">
+TestingDashboardPage.tsx:1709:className="text-purple-400 hover:text-purple-300 p-1"
+TestingDashboardPage.tsx:1724:<h4 className="font-semibold text-emerald-400 mb-1">Resolution & QA Notes</h4>
+TestingDashboardPage.tsx:1725:<div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-200 leading-relaxed whitespace-pre-wrap">
+TestingDashboardPage.tsx:1745:className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+TestingDashboardPage.tsx:1762:className="px-3.5 py-2 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors cursor-pointer"
+TestingDashboardPage.tsx:1813:className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition-colors cursor-pointer"
+theme.css:23:/* Brand accent defaults to Vibrant Purple */
+theme.css:31:/* Vibrant Purple */
+theme.css:32:html[data-accent="purple"] {
+theme.css:40:/* Electric Indigo */
+theme.css:41:html[data-accent="indigo"] {
+theme.css:49:/* Emerald Green */
+theme.css:50:html[data-accent="emerald"] {
+pms.ts:181:accentColor: 'purple' | 'indigo' | 'emerald' | 'blue' | 'professional';
+App.tsx:70:accentColor: 'purple',
+App.tsx:77:document.documentElement.dataset.accent = appearanceSettings.accentColor || 'purple';
+index.css:76:.theme-light [class*="bg-purple-900/10"],
+index.css:77:.theme-light [class*="bg-purple-950"] {
+index.css:82:.theme-light [class*="bg-indigo-950"],
+index.css:88:.theme-light [class*="bg-emerald-950"] {
+index.css:155:.theme-light [class*="text-emerald-300"],
+index.css:156:.theme-light [class*="text-emerald-400"] {
+index.css:160:.theme-light [class*="text-purple-300"],
+index.css:161:.theme-light [class*="text-purple-400"] {
+index.css:165:.theme-light [class*="text-indigo-300"],
+index.css:166:.theme-light [class*="text-indigo-400"] {
+index.css:183:.theme-light [class*="bg-emerald-500/15"],
+index.css:184:.theme-light [class*="bg-emerald-500/20"] {
+index.css:189:.theme-light [class*="bg-purple-500/15"],
+index.css:190:.theme-light [class*="bg-purple-500/20"] {
+index.css:195:.theme-light [class*="bg-indigo-500/15"],
+index.css:196:.theme-light [class*="bg-indigo-500/20"] {
+index.css:237:.theme-light button[class*="from-purple-"],
+index.css:238:.theme-light button[class*="bg-purple-600"],
+index.css:239:.theme-light a[class*="bg-purple-600"] {
+index.css:250:.theme-light button[class*="bg-slate-800"]:not([class*="from-"]):not([class*="text-rose-"]):not([class*="text-emerald-"]) {
+main.tsx:11:document.documentElement.dataset.accent = parsed?.accentColor || 'purple';
+main.tsx:13:document.documentElement.dataset.accent = 'purple';
+main.tsx:16:document.documentElement.dataset.accent = 'purple';

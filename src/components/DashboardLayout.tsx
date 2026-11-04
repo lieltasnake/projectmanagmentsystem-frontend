@@ -189,7 +189,9 @@ export default function DashboardLayout({
   const todayDate = useMemo(() => new Date(todayStr), [todayStr]);
 
   const overdueTasksCount = useMemo(() => {
-    return tasks.filter((t) => t.deadline && t.status !== 'Completed' && new Date(t.deadline) < todayDate).length;
+    return tasks.filter(
+      (t) => t.deadline && !t.approvedAt && new Date(t.deadline) < todayDate
+    ).length;
   }, [tasks, todayDate]);
 
   const pendingReviewCount = useMemo(() => {
@@ -201,7 +203,8 @@ export default function DashboardLayout({
   }, [tasks]);
 
   const completedCount = useMemo(() => {
-    return tasks.filter((t) => t.status === 'Completed').length;
+    // A task is Completed only after genuine PM final approval (approved_at + approved_by_id).
+    return tasks.filter((t) => t.approvedAt && t.approvedById).length;
   }, [tasks]);
 
   const summaryStats = {
@@ -262,13 +265,16 @@ export default function DashboardLayout({
         });
       } else {
         // If task has review feedback or specific status without history array
-        if (task.status === 'Completed' || task.status === 'Under Review' || task.tlRecommendation) {
+        if (
+          (task.status === 'Under Review' || task.tlRecommendation || task.approvedAt) &&
+          !(task.statusId === null && (task.status === 'Completed' || task.status === 'DONE'))
+        ) {
           items.push({
             id: `task-act-${task.id}`,
-            title: task.status === 'Completed' ? `Task Completed` : task.status === 'Under Review' ? `Task Submitted for Review` : `Task Status: ${task.status}`,
+            title: task.approvedAt ? `Task Completed` : task.status === 'Under Review' ? `Task Submitted for Review` : `Task Status: ${task.status}`,
             description: task.reviewFeedback || `Task "${task.title}" in ${projectName}`,
             timestamp: todayStr,
-            type: task.status === 'Completed' ? 'approval' : task.tlRecommendation === 'corrections_requested' ? 'correction' : 'submit',
+            type: task.approvedAt ? 'approval' : task.tlRecommendation === 'corrections_requested' ? 'correction' : 'submit',
             projectName,
           });
         }
@@ -287,7 +293,7 @@ export default function DashboardLayout({
       .filter((t) => t.deadline)
       .map((t) => {
         const d = new Date(t.deadline);
-        const isOverdue = t.status !== 'Completed' && d < todayDate;
+        const isOverdue = !t.approvedAt && d < todayDate;
         return {
           ...t,
           projectName: projectMap[t.projectId] || 'Project',
@@ -382,7 +388,11 @@ export default function DashboardLayout({
       }
 
       // 4. Task completed (PM approved)
-      if (notificationPreferences.taskCompletion && task.status === 'Completed') {
+      if (
+        notificationPreferences.taskCompletion &&
+        task.approvedAt &&
+        task.approvedById
+      ) {
         notifs.push({
           id: `notif-completed-${task.id}`,
           title: 'Task Approved & Completed',
@@ -396,7 +406,7 @@ export default function DashboardLayout({
       }
 
       // 5. Deadline: Overdue (not completed, deadline < today)
-      if (notificationPreferences.taskDeadlines && task.deadline && task.status !== 'Completed') {
+      if (notificationPreferences.taskDeadlines && task.deadline && !task.approvedAt) {
         const deadlineDate = new Date(task.deadline);
         if (deadlineDate < today) {
           notifs.push({
@@ -741,7 +751,7 @@ export default function DashboardLayout({
             <div className="mb-6">
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
                 <span>Welcome to your PMS Workspace</span>
-                <Sparkles className="w-6 h-6 text-purple-400" />
+                <Sparkles className="w-6 h-6 text-accent-light" />
               </h2>
               <p className="mt-1 text-sm text-slate-300">
                 Overview and tracking portal for Project Managers, Team Leaders, and Members.
@@ -751,12 +761,12 @@ export default function DashboardLayout({
             {/* Six Metric Summary Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5 mb-8">
               {/* Card 1: Total Projects */}
-              <div className="relative overflow-hidden rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl transition-all duration-300 hover:border-purple-500/50 hover:shadow-purple-500/10 group">
+              <div className="relative overflow-hidden rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl transition-all duration-300 hover:border-accent/50 hover:shadow-accent/10 group">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                     Total Projects
                   </span>
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 text-accent-light flex items-center justify-center group-hover:scale-110 transition-transform">
                     <FolderKanban className="w-5 h-5" />
                   </div>
                 </div>
@@ -764,8 +774,8 @@ export default function DashboardLayout({
                   <div className="text-3xl font-extrabold text-white tracking-tight">
                     {summaryStats.totalProjects}
                   </div>
-                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-purple-300">
-                    <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-accent-light">
+                    <TrendingUp className="w-3.5 h-3.5 text-accent-light" />
                     <span>
                       {summaryStats.totalProjects > 0
                         ? `${summaryStats.totalProjects} active`
@@ -846,12 +856,12 @@ export default function DashboardLayout({
               </div>
 
               {/* Card 5: Pending Review */}
-              <div className="relative overflow-hidden rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl transition-all duration-300 hover:border-purple-500/50 hover:shadow-purple-500/10 group">
+              <div className="relative overflow-hidden rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl transition-all duration-300 hover:border-accent/50 hover:shadow-accent/10 group">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                     Pending Review
                   </span>
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 text-accent-light flex items-center justify-center group-hover:scale-110 transition-transform">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                 </div>
@@ -859,7 +869,7 @@ export default function DashboardLayout({
                   <div className="text-3xl font-extrabold text-white tracking-tight">
                     {summaryStats.pendingReview}
                   </div>
-                  <div className="mt-1.5 flex items-center gap-1 text-[11px] text-purple-300">
+                  <div className="mt-1.5 flex items-center gap-1 text-[11px] text-accent-light">
                     <span>
                       {summaryStats.pendingReview > 0
                         ? `${summaryStats.pendingReview} awaiting review`
@@ -895,7 +905,7 @@ export default function DashboardLayout({
 
             {/* Note on Completed Tasks */}
             <div className="mb-8 p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-center gap-2.5">
-              <AlertCircle className="w-4 h-4 text-purple-400 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-accent-light shrink-0" />
               <span>
                 <strong>Note on Completed Tasks:</strong> A task is officially counted as <strong>Completed</strong> only after final review and approval by the <strong>Project Manager (PM)</strong>.
               </span>
@@ -907,7 +917,7 @@ export default function DashboardLayout({
               <div className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl flex flex-col">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-accent-soft border border-accent/30 text-accent-light flex items-center justify-center">
                       <FolderKanban className="w-4 h-4" />
                     </div>
                     <div>
@@ -919,7 +929,7 @@ export default function DashboardLayout({
                     <button
                       type="button"
                       onClick={() => setActiveItem('projects')}
-                      className="text-xs text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 cursor-pointer"
+                      className="text-xs text-accent-light hover:text-accent-light font-semibold flex items-center gap-1 cursor-pointer"
                     >
                       <span>View all</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -929,7 +939,7 @@ export default function DashboardLayout({
 
                 {projects.length === 0 ? (
                   <div className="flex-1 rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-8 text-center flex flex-col items-center justify-center min-h-[200px]">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/20 text-accent-light flex items-center justify-center mb-2.5">
                       <FolderKanban className="w-5 h-5" />
                     </div>
                     <p className="text-sm font-semibold text-slate-200">No active projects</p>
@@ -950,11 +960,11 @@ export default function DashboardLayout({
                         <div
                           key={project.id}
                           onClick={() => handleSelectProject(project)}
-                          className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-purple-500/40 transition-all cursor-pointer group"
+                          className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-accent/40 transition-all cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-2">
                             <div className="min-w-0 pr-2">
-                              <span className="text-sm font-semibold text-white group-hover:text-purple-300 transition-colors truncate block">
+                              <span className="text-sm font-semibold text-white group-hover:text-accent-light transition-colors truncate block">
                                 {project.name}
                               </span>
                               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
@@ -963,7 +973,7 @@ export default function DashboardLayout({
                                 <span>{pTasks.length > 0 ? `${completedPTasks}/${pTasks.length} tasks` : `${project.status}`}</span>
                               </div>
                             </div>
-                            <span className="text-xs font-bold text-purple-300 shrink-0">
+                            <span className="text-xs font-bold text-accent-light shrink-0">
                               {calculatedProgress}%
                             </span>
                           </div>
@@ -972,7 +982,7 @@ export default function DashboardLayout({
                               className={`h-full rounded-full transition-all duration-500 ${
                                 calculatedProgress === 100
                                   ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                                  : 'bg-gradient-to-r from-purple-500 to-indigo-500'
+                                  : 'bg-gradient-to-r from-accent to-accent-hover'
                               }`}
                               style={{ width: `${calculatedProgress}%` }}
                             />
@@ -1086,7 +1096,7 @@ export default function DashboardLayout({
 
               {realRecentActivities.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-slate-700/70 bg-[#0f173b]/40 p-10 sm:p-14 text-center flex flex-col items-center justify-center min-h-[220px]">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-3">
+                  <div className="w-12 h-12 rounded-2xl bg-accent-soft border border-accent/20 flex items-center justify-center text-accent-light mb-3">
                     <Inbox className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm sm:text-base font-semibold text-white">
@@ -1101,7 +1111,7 @@ export default function DashboardLayout({
                   {realRecentActivities.map((act) => (
                     <div
                       key={act.id}
-                      className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-start gap-3 hover:border-purple-500/40 transition-colors"
+                      className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-start gap-3 hover:border-accent/40 transition-colors"
                     >
                       <div
                         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
@@ -1110,7 +1120,7 @@ export default function DashboardLayout({
                             : act.type === 'correction'
                             ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                             : act.type === 'submit'
-                            ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                            ? 'bg-accent-soft text-accent-light border border-accent/30'
                             : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
                         }`}
                       >
@@ -1130,7 +1140,7 @@ export default function DashboardLayout({
                           <span className="text-[10px] text-slate-400 shrink-0">{act.timestamp}</span>
                         </div>
                         <p className="text-xs text-slate-300 mt-1 break-words">{act.description}</p>
-                        <span className="inline-block mt-1 text-[10px] text-purple-300/80 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                        <span className="inline-block mt-1 text-[10px] text-accent-light/80 bg-accent-soft px-2 py-0.5 rounded border border-accent/20">
                           {act.projectName}
                         </span>
                       </div>
@@ -1153,7 +1163,7 @@ export default function DashboardLayout({
       } flex overflow-hidden transition-colors duration-200`}
     >
       {/* Background Decorative Ambient Glows matching Login aesthetic */}
-      <div className="fixed -top-40 -left-40 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed -top-40 -left-40 w-96 h-96 bg-accent-soft rounded-full blur-3xl pointer-events-none" />
       <div className="fixed -bottom-40 -right-40 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
 
       {/* Mobile Backdrop Overlay */}
@@ -1173,14 +1183,14 @@ export default function DashboardLayout({
         {/* PMS Branding Header */}
         <div className="h-16 px-5 flex items-center justify-between border-b border-slate-800/80">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25 ring-2 ring-purple-500/20">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white shadow-md shadow-accent/25 ring-2 ring-accent/20">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
               <div className="font-bold text-base tracking-tight text-white leading-tight">
                 PMS Portal
               </div>
-              <div className="text-[10px] text-purple-300 font-medium">
+              <div className="text-[10px] text-accent-light font-medium">
                 Workspace
               </div>
             </div>
@@ -1214,7 +1224,7 @@ export default function DashboardLayout({
                 }}
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/25'
+                    ? 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-lg shadow-accent/25'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                 }`}
               >
@@ -1231,7 +1241,7 @@ export default function DashboardLayout({
                     className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
                       isActive
                         ? 'bg-white/20 text-white'
-                        : 'bg-slate-800 text-purple-300 border border-purple-500/20'
+                        : 'bg-slate-800 text-accent-light border border-accent/20'
                     }`}
                   >
                     {item.badge}
@@ -1286,7 +1296,7 @@ export default function DashboardLayout({
               <input
                 type="text"
                 placeholder="Search workspace..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-900/70 border border-slate-700/60 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-900/70 border border-slate-700/60 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>
 
@@ -1299,7 +1309,7 @@ export default function DashboardLayout({
             >
               <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-purple-500 ring-2 ring-[#0b112c]" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent ring-2 ring-[#0b112c]" />
               )}
             </button>
 
@@ -1311,12 +1321,12 @@ export default function DashboardLayout({
                 className="flex items-center gap-2.5 p-1.5 rounded-xl hover:bg-slate-800/60 transition-colors cursor-pointer"
               >
                 {/* Avatar with purple gradient border */}
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white font-semibold text-xs shadow-md shadow-purple-500/20">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white font-semibold text-xs shadow-md shadow-accent/20">
                   {avatarInitials}
                 </div>
                 <div className="text-left hidden sm:block leading-tight">
                   <div className="text-xs font-semibold text-white">{displayName}</div>
-                  <div className="text-[10px] text-purple-300 font-medium">{activeRole}</div>
+                  <div className="text-[10px] text-accent-light font-medium">{activeRole}</div>
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400" />
               </button>
@@ -1328,7 +1338,7 @@ export default function DashboardLayout({
                     <p className="text-xs font-medium text-white">{displayName}</p>
                     <p className="text-[11px] text-slate-400 truncate">{displayEmail}</p>
                     <div className="mt-1 flex items-center gap-1.5">
-                      <span className="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                      <span className="text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-accent-soft text-accent-light border border-accent/30">
                         {activeRole}
                       </span>
                     </div>
@@ -1342,7 +1352,7 @@ export default function DashboardLayout({
                     }}
                     className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2 cursor-pointer"
                   >
-                    <User className="w-4 h-4 text-purple-400" />
+                    <User className="w-4 h-4 text-accent-light" />
                     <span>My Profile</span>
                   </button>
 
@@ -1354,7 +1364,7 @@ export default function DashboardLayout({
                     }}
                     className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-2"
                   >
-                    <Settings className="w-4 h-4 text-purple-400" />
+                    <Settings className="w-4 h-4 text-accent-light" />
                     <span>Account Settings</span>
                   </button>
 

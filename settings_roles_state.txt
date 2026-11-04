@@ -1,0 +1,133 @@
+﻿// Roles and Skills management state
+  const [roles, setRoles] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showSkillModal, setShowSkillModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
+  const [editingSkill, setEditingSkill] = useState<any | null>(null);
+  const [roleForm, setRoleForm] = useState({ name: '', description: '' });
+  const [skillForm, setSkillForm] = useState({ name: '', description: '' });
+  const [roleMsg, setRoleMsg] = useState('');
+  const [roleErr, setRoleErr] = useState('');
+  const [skillMsg, setSkillMsg] = useState('');
+  const [skillErr, setSkillErr] = useState('');
+
+  const loadRoles = async () => {
+    try {
+      setRolesLoading(true);
+      const res = await getRoles();
+      if (res.success) setRoles(res.roles || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  const loadSkills = async () => {
+    try {
+      setSkillsLoading(true);
+      const res = await getSkills();
+      if (res.success) setSkills(res.skills || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setSkillsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRoles();
+    loadSkills();
+  }, []);
+
+  const openAddRole = () => {
+    setEditingRole(null);
+    setRoleForm({ name: '', description: '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const openEditRole = (r: any) => {
+    setEditingRole(r);
+    setRoleForm({ name: r.name || '', description: r.description || '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const saveRole = async () => {
+    setRoleMsg('');
+    setRoleErr('');
+    const name = roleForm.name.trim();
+    if (!name) {
+      setRoleErr('Role name is required.');
+      return;
+    }
+    // duplicate check client-side
+    const exists = roles.some((r) => r.id !== editingRole?.id && r.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setRoleErr('A role with this name already exists.');
+      return;
+    }
+    try {
+      if (editingRole) {
+        await updateRole(editingRole.id, { name, description: roleForm.description });
+        setRoleMsg('Role updated successfully.');
+      } else {
+        await createRole({ name, description: roleForm.description });
+        setRoleMsg('Role added successfully.');
+      }
+      await loadRoles();
+      setTimeout(() => setShowRoleModal(false), 800);
+    } catch (e: any) {
+      setRoleErr(e.message || 'Failed to save role.');
+    }
+  };
+
+  const openAddSkill = () => {
+    setEditingSkill(null);
+    setSkillForm({ name: '', description: '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const openEditSkill = (s: any) => {
+    setEditingSkill(s);
+    setSkillForm({ name: s.name || '', description: s.description || '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const saveSkill = async () => {
+    setSkillMsg('');
+    setSkillErr('');
+    const name = skillForm.name.trim();
+    if (!name) {
+      setSkillErr('Skill name is required.');
+      return;
+    }
+    const exists = skills.some((s) => s.id !== editingSkill?.id && s.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setSkillErr('A skill with this name already exists.');
+      return;
+    }
+    try {
+      if (editingSkill) {
+        await updateSkill(editingSkill.id, { name, description: skillForm.description });
+        setSkillMsg('Skill updated successfully.');
+      } else {
+        await createSkill({ name, description: skillForm.description });
+        setSkillMsg('Skill added successfully.');
+      }
+      await loadSkills();
+      setTimeout(() => setShowSkillModal(false), 800);
+    } catch (e: any) {
+      setSkillErr(e.message || 'Failed to save skill.');
+    }
+  };

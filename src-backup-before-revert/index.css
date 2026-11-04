@@ -1,0 +1,512 @@
+/* Light theme - compact clean Jira/ClickUp style */
+.theme-light {
+  background-color: #F4F5F7 !important;
+  color: #172B4D !important;
+}
+
+/* Sidebar in light mode */
+.theme-light aside {
+  background-color: #1E293B !important;
+  border-color: #2A3650 !important;
+}
+
+/* Top bar in light mode */
+.theme-light header {
+  background-color: #FFFFFF !important;
+  border-bottom-color: #E5E7EB !important;
+}
+
+/* Remove all ambient glows and gradients */
+.theme-light .no-ambient-glow, .theme-light .no-gradients {
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+/* Progress bar track */
+.theme-light .progress-track {
+  background: #E5E7EB;
+  border-radius: 3px;
+}
+
+.theme-light .progress-fill {
+  height: 6px;
+  border-radius: 3px;
+  background: #2563EB;
+  transition: width 0.3s ease;
+}
+
+/* Badges light mode */
+.theme-light .badge-overdue {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.theme-light .badge-neutral {
+  background: #E2E8F0;
+  color: #334155;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+}
+
+/* Nav items */
+.theme-light .nav-item {
+  height: 36px;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #CBD5E1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-light .nav-item svg {
+  width: 16px;
+  height: 16px;
+  color: #CBD5E1;
+}
+
+.theme-light .nav-item:hover:not(.nav-item-active) {
+  background: #334155;
+  color: #CBD5E1;
+}
+
+/* Active nav item - flat accent background */
+.theme-light .nav-item-active {
+  background: #DBEAFE;
+  color: #1E293B;
+}
+
+/* Sidebar logo row */
+.theme-light .sidebar-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #2563EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+}
+
+.theme-light .sidebar-logo-text {
+  font-weight: 600;
+  color: #CBD5E1;
+  font-size: 14px;
+}
+
+/* Cards */
+.theme-light .card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+/* Row group header */
+.theme-light .row-group-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5B6472;
+  background: #F8FAFC;
+  padding: 4px 16px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+/* Primary buttons */
+.theme-light button.primary-btn, .theme-light a.primary-btn {
+  background: #2563EB;
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 500;
+}
+
+/* Secondary buttons */
+.theme-light button.secondary-btn {
+  background: #F1F5F9;
+  color: #172B4D;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-weight: 500;
+}
+
+/* Focus rings */
+.theme-light [role="button"]:focus-visible, .theme-light a:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* Dark mode - uses CSS variables, no .theme-light class */
+:not(.theme-light) {
+  background-color: #0F172A;
+  color: #E5E7EB;
+}
+
+/* Sidebar in dark mode */
+:not(.theme-light) aside {
+  background-color: #0B1220;
+  border-color: #2A3650;
+}
+
+/* Top bar in dark mode */
+:not(.theme-light) header {
+  background-color: #162033;
+  border-bottom-color: #2A3650;
+}
+
+/* Progress bar in dark mode */
+:not(.theme-light) .progress-track {
+  background: #2A3650;
+}
+
+:not(.theme-light) .progress-fill {
+  background: #2563EB;
+}
+
+/* Badges dark mode */
+:not(.theme-light) .badge-overdue {
+  background: rgba(254, 226, 226, 0.2);
+  color: #F87171;
+}
+
+:not(.theme-light) .badge-neutral {
+  background: rgba(226, 227, 240, 0.2);
+  color: #CBD5E1;
+}
+
+/* Nav items in dark mode */
+:not(.theme-light) .nav-item {
+  color: #94A3B8;
+}
+
+:not(.theme-light) .nav-item:hover:not(.nav-item-active) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Avatar in dark mode */
+:not(.theme-light) .avatar-topbar {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60A5FA;
+}
+
+/* Card in dark mode */
+:not(.theme-light) .card {
+  background: #162033;
+  border-color: #2A3650;
+}
+
+/* Table in dark mode */
+:not(.theme-light) table tbody tr td.border-b, :not(.theme-light) table tbody tr th.border-b {
+  border-color: #2A3650;
+}
+
+/* Focus visible in dark mode */
+:not(.theme-light) [role="button"]:focus-visible, :not(.theme-light) a:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
+
+/* Search box in dark mode */
+:not(.theme-light) input[type="search"], :not(.theme-light) input[type="text"] {
+  background-color: #162033;
+  border-color: #2A3650;
+  color: #E5E7EB;
+}
+
+:not(.theme-light) input[type="search"]::placeholder, :not(.theme-light) input[type="text"]::placeholder {
+  color: #5B6472;
+}
+
+/* Avatar in dark mode sidebar */
+:not(.theme-light) .avatar-accent {
+  background: rgba(37, 99, 235, 0.15);
+  color: #60A5FA;
+}
+
+/* Text colors in dark mode */
+:not(.theme-light) h1, :not(.theme-light) h2, :not(.theme-light) h3, :not(.theme-light) h4, :not(.theme-light) h5, :not(.theme-light) h6 {
+  color: #E5E7EB !important;
+}
+
+/* Avatar initials */
+:not(.theme-light) .avatar-initials, .theme-light .avatar-initials {
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT THEME MODE OVERRIDES
+   Preserves full aesthetic fidelity in dark mode while ensuring
+   crisp contrast, background harmony, and readability in light mode.
+   ═══════════════════════════════════════════════════════════════ */
+
+.theme-light {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Structural Shell Surfaces */
+.theme-light aside {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light header {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Background Color Class Overrides */
+.theme-light [class*="bg-[#070b19]"] {
+  background-color: #f8fafc !important;
+}
+
+.theme-light [class*="bg-[#0b112c]"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light [class*="bg-[#0f173b]"] {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06) !important;
+}
+
+/* Modals & Special Containers (especially TaskReviewModal) */
+.theme-light [class*="bg-[#090d21]"] {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light [class*="bg-[#0d1435]"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light [class*="from-[#131b44]"] {
+  background: #f8faff !important;
+  border-color: #c7d2fe !important;
+}
+
+.theme-light [class*="bg-slate-900"] {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Soft Tinted Cards */
+.theme-light [class*="bg-purple-900/10"],
+.theme-light [class*="bg-purple-950"] {
+  background-color: #faf5ff !important;
+  border-color: #e9d5ff !important;
+}
+
+.theme-light [class*="bg-indigo-950"],
+.theme-light [class*="bg-blue-950"] {
+  background-color: #eff6ff !important;
+  border-color: #bfdbfe !important;
+}
+
+.theme-light [class*="bg-emerald-950"] {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.theme-light [class*="bg-amber-950"] {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+.theme-light [class*="bg-rose-950"] {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+
+/* Borders */
+.theme-light [class*="border-slate-800"] {
+  border-color: #e2e8f0 !important;
+}
+
+.theme-light [class*="border-slate-700"] {
+  border-color: #cbd5e1 !important;
+}
+
+/* Text Hierarchy & Contrast Fixes */
+.theme-light h1[class*="text-white"],
+.theme-light h2[class*="text-white"],
+.theme-light h3[class*="text-white"],
+.theme-light h4[class*="text-white"],
+.theme-light h5[class*="text-white"],
+.theme-light h6[class*="text-white"],
+.theme-light strong[class*="text-white"],
+.theme-light b[class*="text-white"] {
+  color: #0f172a !important;
+}
+
+/* Convert standalone text-white elements (not inside colored buttons/badges) */
+.theme-light p[class*="text-white"]:not([class*="bg-"]):not([class*="from-"]),
+.theme-light span[class*="text-white"]:not([class*="bg-"]):not([class*="from-"]):not([class*="badge"]),
+.theme-light div[class*="text-white"]:not([class*="bg-"]):not([class*="from-"]) {
+  color: #0f172a !important;
+}
+
+.theme-light [class*="text-slate-100"]:not(button):not([class*="bg-"]):not([class*="from-"]),
+.theme-light [class*="text-slate-200"]:not(button):not([class*="bg-"]):not([class*="from-"]) {
+  color: #1e293b !important;
+}
+
+.theme-light [class*="text-slate-300"]:not(button):not([class*="bg-"]):not([class*="from-"]) {
+  color: #334155 !important;
+}
+
+.theme-light [class*="text-slate-400"]:not(button):not([class*="bg-"]):not([class*="from-"]),
+.theme-light [class*="text-slate-500"]:not(button):not([class*="bg-"]):not([class*="from-"]) {
+  color: #64748b !important;
+}
+
+/* Status Badges & Action Pill Contrast in Light Mode */
+.theme-light [class*="text-amber-200"],
+.theme-light [class*="text-amber-300"] {
+  color: #b45309 !important;
+}
+
+.theme-light [class*="text-amber-400"] {
+  color: #92400e !important;
+}
+
+.theme-light [class*="text-emerald-300"],
+.theme-light [class*="text-emerald-400"] {
+  color: #047857 !important;
+}
+
+.theme-light [class*="text-purple-300"],
+.theme-light [class*="text-purple-400"] {
+  color: var(--accent) !important;
+}
+
+.theme-light [class*="text-indigo-300"],
+.theme-light [class*="text-indigo-400"] {
+  color: #4338ca !important;
+}
+
+.theme-light [class*="text-rose-200"],
+.theme-light [class*="text-rose-300"],
+.theme-light [class*="text-rose-400"] {
+  color: #be123c !important;
+}
+
+/* Badge Pill Backgrounds in Light Mode */
+.theme-light [class*="bg-amber-500/15"],
+.theme-light [class*="bg-amber-500/20"] {
+  background-color: #fef3c7 !important;
+  border-color: #fde68a !important;
+}
+
+.theme-light [class*="bg-emerald-500/15"],
+.theme-light [class*="bg-emerald-500/20"] {
+  background-color: #d1fae5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.theme-light [class*="bg-purple-500/15"],
+.theme-light [class*="bg-purple-500/20"] {
+  background-color: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+}
+
+.theme-light [class*="bg-indigo-500/15"],
+.theme-light [class*="bg-indigo-500/20"] {
+  background-color: #e0e7ff !important;
+  border-color: #c7d2fe !important;
+}
+
+.theme-light [class*="bg-rose-500/15"],
+.theme-light [class*="bg-rose-500/20"] {
+  background-color: #ffe4e6 !important;
+  border-color: #fecdd3 !important;
+}
+
+/* Form Controls & Inputs */
+.theme-light input:not([type="checkbox"]):not([type="radio"]),
+.theme-light select,
+.theme-light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light input:not([type="checkbox"]):not([type="radio"]):focus,
+.theme-light select:focus,
+.theme-light textarea:focus {
+  border-color: #9333ea !important;
+  box-shadow: 0 0 0 1px #9333ea !important;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Read-only / Disabled Inputs (like assigned role in Profile) */
+.theme-light input:disabled,
+.theme-light input[readonly] {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Primary Saturated Buttons (Keep Crisp White Text) */
+.theme-light button[class*="from-purple-"],
+.theme-light button[class*="bg-purple-600"],
+.theme-light a[class*="bg-purple-600"] {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.theme-light button[class*="bg-accent"] {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+/* Neutral Gray Secondary Buttons in Light Mode */
+.theme-light button[class*="bg-slate-800"]:not([class*="from-"]):not([class*="text-rose-"]):not([class*="text-emerald-"]) {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light button[class*="bg-slate-800"]:not([class*="from-"]):hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* File Upload Dropzones in Light Mode */
+.theme-light label[class*="border-dashed"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+.theme-light label[class*="border-dashed"]:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #a855f7 !important;
+}

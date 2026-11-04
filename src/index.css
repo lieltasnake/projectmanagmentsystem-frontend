@@ -159,7 +159,7 @@
 
 .theme-light [class*="text-purple-300"],
 .theme-light [class*="text-purple-400"] {
-  color: #6d28d9 !important;
+  color: var(--accent) !important;
 }
 
 .theme-light [class*="text-indigo-300"],
@@ -188,8 +188,8 @@
 
 .theme-light [class*="bg-purple-500/15"],
 .theme-light [class*="bg-purple-500/20"] {
-  background-color: #f3e8ff !important;
-  border-color: #e9d5ff !important;
+  background-color: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
 }
 
 .theme-light [class*="bg-indigo-500/15"],
@@ -236,15 +236,13 @@
 /* Primary Saturated Buttons (Keep Crisp White Text) */
 .theme-light button[class*="from-purple-"],
 .theme-light button[class*="bg-purple-600"],
-.theme-light button[class*="from-emerald-"],
-.theme-light button[class*="bg-emerald-600"],
-.theme-light button[class*="from-indigo-"],
-.theme-light button[class*="bg-indigo-600"],
-.theme-light button[class*="bg-rose-600"],
-.theme-light a[class*="bg-purple-600"],
-.theme-light [class*="from-purple-"] *,
-.theme-light [class*="from-emerald-"] *,
-.theme-light [class*="bg-purple-600"] * {
+.theme-light a[class*="bg-purple-600"] {
+  background-color: var(--accent) !important;
+  color: #ffffff !important;
+}
+
+.theme-light button[class*="bg-accent"] {
+  background-color: var(--accent) !important;
   color: #ffffff !important;
 }
 

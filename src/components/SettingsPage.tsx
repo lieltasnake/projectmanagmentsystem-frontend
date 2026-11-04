@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import {
   User,
   Palette,
@@ -18,8 +18,13 @@ import {
   KeyRound,
   Eye,
   EyeOff,
+  Users,
+  Plus,
+  X,
+  Edit2,
+  Code,
 } from 'lucide-react';
-import { updateMyProfile, changeMyPassword } from '../services/api';
+import { updateMyProfile, changeMyPassword, getRoles, createRole, updateRole, getSkills, createSkill, updateSkill } from '../services/api';
 import type {
   UserProfile,
   UserRole,
@@ -28,6 +33,7 @@ import type {
   Task,
   Project,
 } from '../types/pms';
+
 
 interface SettingsPageProps {
   userProfile: UserProfile;
@@ -52,7 +58,7 @@ export default function SettingsPage({
   onUpdateNotificationPreferences,
   onUpdateAppearance,
 }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'notifications' | 'about'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'notifications' | 'roles' | 'skills' | 'about'>('profile');
 
   // Local form state for Profile
   const [fullName, setFullName] = useState(userProfile.name);
@@ -203,6 +209,140 @@ export default function SettingsPage({
     });
   };
 
+// Roles and Skills management state
+  const [roles, setRoles] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [showSkillModal, setShowSkillModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<any | null>(null);
+  const [editingSkill, setEditingSkill] = useState<any | null>(null);
+  const [roleForm, setRoleForm] = useState({ name: '', description: '' });
+  const [skillForm, setSkillForm] = useState({ name: '', description: '' });
+  const [roleMsg, setRoleMsg] = useState('');
+  const [roleErr, setRoleErr] = useState('');
+  const [skillMsg, setSkillMsg] = useState('');
+  const [skillErr, setSkillErr] = useState('');
+
+  const loadRoles = async () => {
+    try {
+      setRolesLoading(true);
+      const res = await getRoles();
+      if (res.success) setRoles(res.roles || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  const loadSkills = async () => {
+    try {
+      setSkillsLoading(true);
+      const res = await getSkills();
+      if (res.success) setSkills(res.skills || []);
+    } catch (e: any) {
+      // ignore
+    } finally {
+      setSkillsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRoles();
+    loadSkills();
+  }, []);
+
+  const openAddRole = () => {
+    setEditingRole(null);
+    setRoleForm({ name: '', description: '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const openEditRole = (r: any) => {
+    setEditingRole(r);
+    setRoleForm({ name: r.name || '', description: r.description || '' });
+    setRoleMsg('');
+    setRoleErr('');
+    setShowRoleModal(true);
+  };
+
+  const saveRole = async () => {
+    setRoleMsg('');
+    setRoleErr('');
+    const name = roleForm.name.trim();
+    if (!name) {
+      setRoleErr('Role name is required.');
+      return;
+    }
+    // duplicate check client-side
+    const exists = roles.some((r) => r.id !== editingRole?.id && r.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setRoleErr('A role with this name already exists.');
+      return;
+    }
+    try {
+      if (editingRole) {
+        await updateRole(editingRole.id, { name, description: roleForm.description });
+        setRoleMsg('Role updated successfully.');
+      } else {
+        await createRole({ name, description: roleForm.description });
+        setRoleMsg('Role added successfully.');
+      }
+      await loadRoles();
+      setTimeout(() => setShowRoleModal(false), 800);
+    } catch (e: any) {
+      setRoleErr(e.message || 'Failed to save role.');
+    }
+  };
+
+  const openAddSkill = () => {
+    setEditingSkill(null);
+    setSkillForm({ name: '', description: '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const openEditSkill = (s: any) => {
+    setEditingSkill(s);
+    setSkillForm({ name: s.name || '', description: s.description || '' });
+    setSkillMsg('');
+    setSkillErr('');
+    setShowSkillModal(true);
+  };
+
+  const saveSkill = async () => {
+    setSkillMsg('');
+    setSkillErr('');
+    const name = skillForm.name.trim();
+    if (!name) {
+      setSkillErr('Skill name is required.');
+      return;
+    }
+    const exists = skills.some((s) => s.id !== editingSkill?.id && s.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setSkillErr('A skill with this name already exists.');
+      return;
+    }
+    try {
+      if (editingSkill) {
+        await updateSkill(editingSkill.id, { name, description: skillForm.description });
+        setSkillMsg('Skill updated successfully.');
+      } else {
+        await createSkill({ name, description: skillForm.description });
+        setSkillMsg('Skill added successfully.');
+      }
+      await loadSkills();
+      setTimeout(() => setShowSkillModal(false), 800);
+    } catch (e: any) {
+      setSkillErr(e.message || 'Failed to save skill.');
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* 1. Header */}
@@ -212,7 +352,7 @@ export default function SettingsPage({
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Settings
             </h2>
-            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+            <span className="text-xs px-2.5 py-1 rounded-full font-semibold bg-accent-soft text-accent-light border border-accent/30">
               Stage 4
             </span>
           </div>
@@ -222,8 +362,8 @@ export default function SettingsPage({
         </div>
 
         {/* Current Active Role Badge */}
-        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-[#0f173b]/80 border border-purple-500/20 text-xs">
-          <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-[#0f173b]/80 border border-accent/20 text-xs">
+          <ShieldCheck className="w-4 h-4 text-accent-light shrink-0" />
           <div>
             <span className="text-slate-400">Active Role: </span>
             <span className="font-semibold text-white">{currentUserRole}</span>
@@ -238,7 +378,7 @@ export default function SettingsPage({
           onClick={() => setActiveTab('profile')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
             activeTab === 'profile'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
           }`}
         >
@@ -251,7 +391,7 @@ export default function SettingsPage({
           onClick={() => setActiveTab('appearance')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
             activeTab === 'appearance'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
           }`}
         >
@@ -264,15 +404,41 @@ export default function SettingsPage({
           onClick={() => setActiveTab('notifications')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
             activeTab === 'notifications'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
           }`}
         >
           <Bell className="w-4 h-4" />
           <span>Notifications</span>
-          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-purple-300 font-bold border border-purple-500/30">
+          <span className="text-[11px] px-1.5 py-0.2 rounded-full bg-slate-900/80 text-accent-light font-bold border border-accent/30">
             {Object.values(notificationPreferences).filter(Boolean).length}/4
           </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('roles')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'roles'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Roles</span>
+        </button>
+
+<button
+          type="button"
+          onClick={() => setActiveTab('skills')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
+            activeTab === 'skills'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
+              : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <Code className="w-4 h-4" />
+          <span>Skills</span>
         </button>
 
         <button
@@ -280,7 +446,7 @@ export default function SettingsPage({
           onClick={() => setActiveTab('about')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 cursor-pointer ${
             activeTab === 'about'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
+              ? 'bg-accent text-white shadow-lg shadow-accent/25'
               : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
           }`}
         >
@@ -291,7 +457,7 @@ export default function SettingsPage({
 
       {/* 3. Tab Contents */}
 
-      {/* ── TAB 1: PROFILE ── */}
+      {/* â”€â”€ TAB 1: PROFILE â”€â”€ */}
       {activeTab === 'profile' && (
         <div className="space-y-6">
           {/* Success / Error Alerts */}
@@ -459,7 +625,7 @@ export default function SettingsPage({
                   <button
                     type="submit"
                     disabled={isSavingProfile}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-600/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all shadow-lg shadow-accent/25 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     <Check className="w-4 h-4" />
                     <span>{isSavingProfile ? 'Saving...' : 'Save Profile Changes'}</span>
@@ -473,7 +639,7 @@ export default function SettingsPage({
           <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
             <div className="pb-4 border-b border-slate-800/80 mb-5">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-purple-400" />
+                <KeyRound className="w-4 h-4 text-accent-light" />
                 <span>Change Password</span>
               </h3>
               <p className="text-xs text-slate-300">
@@ -562,7 +728,7 @@ export default function SettingsPage({
                 <button
                   type="submit"
                   disabled={isSavingPass}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-lg cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all shadow-lg cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
                   <Lock className="w-4 h-4" />
                   <span>{isSavingPass ? 'Updating Password...' : 'Update Password'}</span>
@@ -572,9 +738,9 @@ export default function SettingsPage({
           </div>
 
           {/* Role Governance Scope Explanation */}
-          <div className="p-5 rounded-2xl bg-purple-900/10 border border-purple-500/20">
+              <div className="p-5 rounded-2xl bg-accent-soft border border-accent/20">
             <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
+                <ShieldCheck className="w-4 h-4 text-accent-light" />
               <span>Active Governance Scope: {userProfile.role}</span>
             </h4>
             {userProfile.role === 'Project Manager' && (
@@ -596,7 +762,7 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* ── TAB 2: APPEARANCE ── */}
+      {/* â”€â”€ TAB 2: APPEARANCE â”€â”€ */}
       {activeTab === 'appearance' && (
         <div className="space-y-6">
           <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 space-y-6">
@@ -624,12 +790,12 @@ export default function SettingsPage({
                   </div>
                 )}
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/30 flex items-center justify-center text-accent-light">
                     <Moon className="w-5 h-5" />
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-white">Dark Mode (Default)</h4>
-                    <span className="text-[10px] text-purple-300 font-medium">Recommended for PMS</span>
+                    <span className="text-[10px] text-accent-light font-medium">Recommended for PMS</span>
                   </div>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed mb-4">
@@ -693,21 +859,22 @@ export default function SettingsPage({
                   { id: 'indigo', label: 'Electric Indigo', class: 'bg-indigo-600' },
                   { id: 'emerald', label: 'Emerald Green', class: 'bg-emerald-600' },
                   { id: 'blue', label: 'Ocean Blue', class: 'bg-blue-600' },
+                  { id: 'professional', label: 'Professional Blue', class: 'bg-blue-600' },
                 ].map((color) => (
                   <button
                     key={color.id}
                     type="button"
                     onClick={() => onUpdateAppearance({ ...appearanceSettings, accentColor: color.id as any })}
                     className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                      appearanceSettings.accentColor === color.id
-                        ? 'border-purple-500 bg-purple-500/15 text-white'
-                        : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white'
-                    }`}
+                    appearanceSettings.accentColor === color.id
+                      ? 'border-accent bg-accent-soft text-white'
+                      : 'border-slate-800 bg-slate-900/60 text-slate-300 hover:text-white'
+                  }`}
                   >
                     <span className={`w-3.5 h-3.5 rounded-full ${color.class}`} />
                     <span>{color.label}</span>
                     {appearanceSettings.accentColor === color.id && (
-                      <Check className="w-3 h-3 text-purple-400 ml-1" />
+                      <Check className="w-3 h-3 text-accent-light ml-1" />
                     )}
                   </button>
                 ))}
@@ -732,7 +899,7 @@ export default function SettingsPage({
                   })
                 }
                 className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer ${
-                  appearanceSettings.compactMode ? 'bg-purple-600' : 'bg-slate-800'
+                  appearanceSettings.compactMode ? 'bg-accent' : 'bg-slate-800'
                 }`}
               >
                 <div
@@ -746,7 +913,7 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* ── TAB 3: NOTIFICATIONS ── */}
+      {/* â”€â”€ TAB 3: NOTIFICATIONS â”€â”€ */}
       {activeTab === 'notifications' && (
         <div className="space-y-6">
           <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 space-y-6">
@@ -816,7 +983,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={() => toggleNotification('taskDeadlines')}
                   className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
-                    notificationPreferences.taskDeadlines ? 'bg-purple-600' : 'bg-slate-800'
+                    notificationPreferences.taskDeadlines ? 'bg-accent' : 'bg-slate-800'
                   }`}
                 >
                   <div
@@ -850,7 +1017,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={() => toggleNotification('reviewUpdates')}
                   className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
-                    notificationPreferences.reviewUpdates ? 'bg-purple-600' : 'bg-slate-800'
+                    notificationPreferences.reviewUpdates ? 'bg-accent' : 'bg-slate-800'
                   }`}
                 >
                   <div
@@ -884,7 +1051,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={() => toggleNotification('correctionRequests')}
                   className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
-                    notificationPreferences.correctionRequests ? 'bg-purple-600' : 'bg-slate-800'
+                    notificationPreferences.correctionRequests ? 'bg-accent' : 'bg-slate-800'
                   }`}
                 >
                   <div
@@ -918,7 +1085,7 @@ export default function SettingsPage({
                   type="button"
                   onClick={() => toggleNotification('taskCompletion')}
                   className={`w-12 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
-                    notificationPreferences.taskCompletion ? 'bg-purple-600' : 'bg-slate-800'
+                    notificationPreferences.taskCompletion ? 'bg-accent' : 'bg-slate-800'
                   }`}
                 >
                   <div
@@ -931,8 +1098,8 @@ export default function SettingsPage({
             </div>
 
             {/* Notification Bridge Notice */}
-            <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-xs text-slate-300 flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
+              <div className="p-4 rounded-xl bg-accent-soft border border-accent/20 text-xs text-slate-300 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-accent-light shrink-0" />
               <span>
                 These preferences filter notifications in real time across the workspace. When a category is turned off, its alerts are suppressed from the Notifications page and will not contribute to the sidebar unread counter.
               </span>
@@ -941,18 +1108,206 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* ── TAB 4: ABOUT ── */}
+      {/* ── TAB: ROLES ── */}
+      {activeTab === 'roles' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white">Roles</h3>
+                <p className="text-xs text-slate-300">View, add, and edit custom roles. All authenticated users can manage roles.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddRole}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-accent to-accent-hover hover:from-accent hover:to-accent-hover text-white text-xs font-bold transition-all flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Role</span>
+              </button>
+            </div>
+            {roleMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{roleMsg}</span>
+              </div>
+            )}
+            {roleErr && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{roleErr}</span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {rolesLoading ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">Loading...</td></tr>
+                  ) : roles.length === 0 ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">No roles found</td></tr>
+                  ) : (
+                    roles.map((r: any) => (
+                      <tr key={r.id}>
+                        <td className="py-2.5 px-3 font-medium text-white">{r.name}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{r.description || '-'}</td>
+                        <td className="py-2.5 px-3">{r.isSystem ? 'System' : 'Custom'}</td>
+                         <td className="py-2.5 px-3 text-right">
+                           <button onClick={() => openEditRole(r)} className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-1 ml-auto">
+                             <Edit2 className="w-3 h-3" />
+                             <span>Edit</span>
+                           </button>
+                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {showRoleModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="w-full max-w-md p-6 rounded-2xl bg-[#0f173b] border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-base font-bold text-white">{editingRole ? 'Edit Role' : 'Add Role'}</h4>
+                  <button onClick={() => setShowRoleModal(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                {roleErr && <div className="mb-3 text-xs text-rose-300">{roleErr}</div>}
+                {roleMsg && <div className="mb-3 text-xs text-emerald-300">{roleMsg}</div>}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Role Name *</label>
+                    <input value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Description</label>
+                    <input value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setShowRoleModal(false)} className="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs">Cancel</button>
+                  <button onClick={saveRole} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAB: SKILLS ── */}
+      {activeTab === 'skills' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80 mb-5">
+              <div>
+                <h3 className="text-base font-bold text-white">Skills</h3>
+                <p className="text-xs text-slate-300">View, add, and edit custom skills. All authenticated users can manage skills.</p>
+              </div>
+              <button
+                type="button"
+                onClick={openAddSkill}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Skill</span>
+              </button>
+            </div>
+            {skillMsg && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{skillMsg}</span>
+              </div>
+            )}
+            {skillErr && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{skillErr}</span>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Description</th>
+                    <th className="py-2.5 px-3">Type</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {skillsLoading ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">Loading...</td></tr>
+                  ) : skills.length === 0 ? (
+                    <tr><td colSpan={4} className="py-4 px-3 text-center text-slate-400">No skills found</td></tr>
+                  ) : (
+                    skills.map((s: any) => (
+                      <tr key={s.id}>
+                        <td className="py-2.5 px-3 font-medium text-white">{s.name}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{s.description || '-'}</td>
+                        <td className="py-2.5 px-3">{s.isSystem ? 'System' : 'Custom'}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button onClick={() => openEditSkill(s)} className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/60 flex items-center gap-1 ml-auto">
+                            <Edit2 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {showSkillModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+              <div className="w-full max-w-md p-6 rounded-2xl bg-[#0f173b] border border-slate-800">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-base font-bold text-white">{editingSkill ? 'Edit Skill' : 'Add Skill'}</h4>
+                  <button onClick={() => setShowSkillModal(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
+                {skillErr && <div className="mb-3 text-xs text-rose-300">{skillErr}</div>}
+                {skillMsg && <div className="mb-3 text-xs text-emerald-300">{skillMsg}</div>}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Skill Name *</label>
+                    <input value={skillForm.name} onChange={(e) => setSkillForm({ ...skillForm, name: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Description</label>
+                    <input value={skillForm.description} onChange={(e) => setSkillForm({ ...skillForm, description: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-white" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setShowSkillModal(false)} className="px-3 py-2 rounded-xl border border-slate-700 text-slate-300 text-xs">Cancel</button>
+                  <button onClick={saveSkill} className="px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+            {/* ── TAB 4: ABOUT ── */}
       {activeTab === 'about' && (
         <div className="space-y-6">
           {/* Main App Identity Card */}
           <div className="p-6 rounded-2xl bg-[#0f173b]/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-purple-500/25 ring-2 ring-purple-500/20 shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-accent to-accent-hover flex items-center justify-center text-white shadow-xl shadow-accent/25 ring-2 ring-accent/20 shrink-0">
               <ShieldCheck className="w-9 h-9" />
             </div>
             <div>
               <div className="flex items-center gap-3">
                 <h3 className="text-xl font-extrabold text-white">Project Management System (PMS)</h3>
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-accent-soft text-accent-light border border-accent/30">
                   v1.0.0
                 </span>
               </div>
@@ -967,7 +1322,7 @@ export default function SettingsPage({
             <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Application Name</span>
               <p className="text-sm font-bold text-white mt-1">PMS Portal</p>
-              <p className="text-[11px] text-purple-300 mt-0.5">Pixel Addis Solution</p>
+                <p className="text-[11px] text-accent-light mt-0.5">Pixel Addis Solution</p>
             </div>
 
             <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
@@ -1010,14 +1365,14 @@ export default function SettingsPage({
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Create Projects & Assign Tasks</td>
                     <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Manage Team Members</td>
                     <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Execute Tasks & Post Comments</td>
@@ -1027,21 +1382,21 @@ export default function SettingsPage({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Submit Formal Live Demo Evidence</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                     <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">Yes</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Review & Recommend Approval (TL)</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                     <td className="py-2.5 px-3 text-center text-indigo-400 font-bold">Yes</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Grant Final Approval & Mark Completed</td>
-                    <td className="py-2.5 px-3 text-center text-purple-400 font-bold">Exclusive Authority</td>
+                    <td className="py-2.5 px-3 text-center text-accent-light font-bold">Exclusive Authority</td>
                     <td className="py-2.5 px-3 text-center text-slate-500">Recommend Only</td>
-                    <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                    <td className="py-2.5 px-3 text-center text-slate-500">â€”</td>
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-medium text-white">Configure Personal Profile & Notifications</td>
@@ -1058,3 +1413,15 @@ export default function SettingsPage({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
