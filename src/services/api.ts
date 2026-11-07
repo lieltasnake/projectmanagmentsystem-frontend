@@ -253,6 +253,8 @@ export interface CreateProjectData {
   teamLeaderId?: string;
   teamMemberIds?: string[];
   statuses?: { name: string; color?: string | null; sortOrder?: number; isCompletionStatus?: boolean }[];
+  /** Project key (optional - will be generated if not provided) */
+  projectKey?: string;
 }
 
 export interface UpdateProjectData {
@@ -442,6 +444,8 @@ export async function createProjectTask(
     assignedToId: string | null;
     deadline: string | null;
     createdAt?: string;
+    taskNumber?: number;
+    taskKey?: string;
   };
 }> {
   const priorityMap: Record<string, string> = {
@@ -836,6 +840,201 @@ export async function updateSkill(id: number | string, data: { name: string; des
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+}
+
+// =========================================================================
+// GitHub Integration Endpoints (PM Only)
+// =========================================================================
+
+export interface GitHubInstallation {
+  installationId: string;
+  isActive: boolean;
+}
+
+export interface GitHubInstallationsResponse {
+  success: boolean;
+  count: number;
+  installations: GitHubInstallation[];
+  error?: string;
+}
+
+export interface GitHubRepository {
+  id: string;
+  installation_id: string;
+  github_repo_id: string;
+  name: string;
+  full_name: string;
+  owner_login: string | null;
+  private: boolean;
+  default_branch: string | null;
+  html_url: string | null;
+  description: string | null;
+  archived: boolean;
+  github_created_at: string | null;
+  github_updated_at: string | null;
+  last_synced_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface GitHubRepositoriesResponse {
+  success: boolean;
+  installationId: string;
+  count: number;
+  repositories: GitHubRepository[];
+  error?: string;
+}
+
+export interface GitHubSyncSummary {
+  installationId: string;
+  fetched: number;
+  upserted: number;
+  failed: number;
+  truncated: boolean;
+  complete: boolean;
+  errors: string[];
+}
+
+export interface GitHubSyncResponse {
+  success: boolean;
+  message: string;
+  summary: GitHubSyncSummary;
+  error?: string;
+}
+
+export interface GitHubBranch {
+  id: string;
+  installation_id: string;
+  repository_id: string;
+  branch_name: string;
+  commit_sha: string;
+  protected: boolean;
+  last_synced_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  sync_run_id: string;
+}
+
+export interface GitHubBranchesResponse {
+  success: boolean;
+  installationId: string;
+  count: number;
+  branches: GitHubBranch[];
+  error?: string;
+}
+
+export interface GitHubPullRequest {
+  id: string;
+  installation_id: string;
+  repository_id: string;
+  github_pr_id: string;
+  pr_number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  draft: boolean;
+  head_branch: string | null;
+  base_branch: string | null;
+  head_sha: string | null;
+  base_sha: string | null;
+  author_github_id: string | null;
+  author_login: string | null;
+  created_at_github: string;
+  updated_at_github: string;
+  closed_at_github: string | null;
+  merged_at_github: string | null;
+  html_url: string;
+  last_synced_at: string;
+  created_at: string;
+  updated_at: string;
+  sync_run_id: string;
+}
+
+export interface GitHubPullRequestsResponse {
+  success: boolean;
+  installationId: string;
+  repositoryId: string;
+  count: number;
+  totalCount: number;
+  page: number;
+  per_page: number;
+  totalPages: number;
+  pullRequests: GitHubPullRequest[];
+  error?: string;
+}
+
+export async function getGitHubInstallations(): Promise<GitHubInstallationsResponse> {
+  return request<GitHubInstallationsResponse>('/github/installation', {
+    method: 'GET',
+  });
+}
+
+export interface GitHubInstallationStateResponse {
+  success: boolean;
+  state: string;
+  installationId: string | null;
+  expiresInSeconds: number;
+  error?: string;
+}
+
+export async function getGitHubInstallationState(): Promise<GitHubInstallationStateResponse> {
+  return request<GitHubInstallationStateResponse>('/github/installation/state', {
+    method: 'GET',
+  });
+}
+
+export async function getGitHubRepositories(installationId: string): Promise<GitHubRepositoriesResponse> {
+  return request<GitHubRepositoriesResponse>(`/github/installation/${installationId}/repositories`, {
+    method: 'GET',
+  });
+}
+
+export async function syncGitHubRepositories(installationId: string): Promise<GitHubSyncResponse> {
+  return request<GitHubSyncResponse>(`/github/installation/${installationId}/repositories/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function getGitHubBranches(installationId: string): Promise<GitHubBranchesResponse> {
+  return request<GitHubBranchesResponse>(`/github/installation/${installationId}/branches`, {
+    method: 'GET',
+  });
+}
+
+export async function syncGitHubBranches(installationId: string): Promise<GitHubSyncResponse> {
+  return request<GitHubSyncResponse>(`/github/installation/${installationId}/branches/sync`, {
+    method: 'POST',
+  });
+}
+
+export async function getGitHubPullRequests(
+  installationId: string,
+  repositoryId: string,
+  page?: number,
+  perPage?: number
+): Promise<GitHubPullRequestsResponse> {
+  const query = new URLSearchParams();
+  if (page != null) query.append('page', String(page));
+  if (perPage != null) query.append('per_page', String(perPage));
+  const qs = query.toString();
+  return request<GitHubPullRequestsResponse>(
+    `/github/installation/${installationId}/repositories/${repositoryId}/pull-requests${qs ? `?${qs}` : ''}`,
+    {
+      method: 'GET',
+    }
+  );
+}
+
+export async function syncGitHubPullRequests(
+  installationId: string,
+  repositoryId: string
+): Promise<GitHubSyncResponse> {
+  return request<GitHubSyncResponse>(
+    `/github/installation/${installationId}/repositories/${repositoryId}/pull-requests/sync`,
+    {
+      method: 'POST',
+    }
+  );
 }
 
 

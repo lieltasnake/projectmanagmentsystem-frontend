@@ -7,6 +7,7 @@ import NotificationsPage from './NotificationsPage';
 import ReportsPage from './ReportsPage';
 import SettingsPage from './SettingsPage';
 import TestingDashboardPage from './TestingDashboardPage';
+import GitHubIntegrationPage from './GitHubIntegrationPage';
 import type {
   Project,
   Task,
@@ -46,6 +47,7 @@ import {
   Activity,
   CheckCircle2,
   Bug as BugIcon,
+  GitBranch,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -569,6 +571,7 @@ export default function DashboardLayout({
         icon: BarChart3,
       },
       { id: 'settings', label: 'Settings', icon: Settings },
+      { id: 'github', label: 'GitHub', icon: GitBranch },
     ];
 
   // Derive display user initials and display name from userProfile state
@@ -743,6 +746,8 @@ export default function DashboardLayout({
             onUpdateAppearance={setAppearanceSettings}
           />
         );
+      case 'github':
+        return <GitHubIntegrationPage currentUserRole={activeRole} />;
       case 'dashboard':
       default:
         return (
