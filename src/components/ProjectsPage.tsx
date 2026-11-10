@@ -675,6 +675,11 @@ export default function ProjectsPage({
                       <span className="text-[11px] font-mono text-accent-light/80 px-2 py-0.5 rounded-md bg-accent-soft border border-accent/20">
                         {project.id}
                       </span>
+                      {project.projectKey && (
+                        <span className="text-[10px] font-medium text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-900/40 border border-emerald-500/30">
+                          {project.projectKey}
+                        </span>
+                      )}
                       <div className="flex items-center gap-1">
                         {currentUserRole === 'Project Manager' && (
                           <button
@@ -836,18 +841,23 @@ export default function ProjectsPage({
                         onClick={() => onSelectProject && onSelectProject(project)}
                         className={`hover:bg-slate-800/40 transition-colors ${onSelectProject ? 'cursor-pointer' : ''}`}
                       >
-                        {/* Project Name & Description */}
-                        <td className="px-5 py-4 max-w-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-mono text-accent-light/80 px-1.5 py-0.5 rounded bg-accent-soft border border-accent/20">
-                              {project.id}
-                            </span>
-                            <div className="font-bold text-white text-sm">{project.name}</div>
-                          </div>
-                          <p className="mt-1 text-slate-400 text-[11px] line-clamp-1">
-                            {project.description}
-                          </p>
-                        </td>
+                    {/* Project Name & Description */}
+                         <td className="px-5 py-4 max-w-xs">
+                           <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-mono text-accent-light/80 px-1.5 py-0.5 rounded bg-accent-soft border border-accent/20">
+                               {project.id}
+                             </span>
+                             {project.projectKey && (
+                               <span className="text-[9px] font-medium text-emerald-300 px-1.5 py-0.2 rounded bg-emerald-900/40 border border-emerald-500/30">
+                                 {project.projectKey}
+                               </span>
+                             )}
+                             <div className="font-bold text-white text-sm">{project.name}</div>
+                           </div>
+                           <p className="mt-1 text-slate-400 text-[11px] line-clamp-1">
+                             {project.description}
+                           </p>
+                         </td>
 
                         {/* Responsible PM */}
                         <td className="px-5 py-4 whitespace-nowrap">

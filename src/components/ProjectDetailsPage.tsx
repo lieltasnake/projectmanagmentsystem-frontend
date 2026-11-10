@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Clock,
   CheckCircle2,
+  AlertCircle,
   AlertTriangle,
   Layers,
   Plus,
@@ -25,12 +26,24 @@ import {
   LayoutList,
   Kanban,
   GripVertical,
-  AlertCircle,
+  GitBranch,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
-import type { Project, Task, TeamMember, Bug, ProjectStatus } from '../types/pms';
-import TaskReviewModal, { type UserRole } from './TaskReviewModal';
+import type { Project, Task, TeamMember, Bug, ProjectStatus, UserRole } from '../types/pms';
+import TaskReviewModal from './TaskReviewModal';
 import { useProjectTeam } from '../hooks/useProjectTeam';
-import { getProjectStatuses, approveTask } from '../services/api';
+import {
+  getProjectStatuses,
+  approveTask,
+  getProjectGitHubRepositories,
+  connectProjectGitHubRepo,
+  disconnectProjectGitHubRepo,
+  getGitHubInstallations,
+  getGitHubRepositories,
+  type ProjectGitHubRepository,
+  type GitHubInstallation,
+} from '../services/api';
 
 interface ProjectDetailsPageProps {
   project: Project;
@@ -47,7 +60,7 @@ interface ProjectDetailsPageProps {
   onProjectUpdated?: (project: Project) => void;
 }
 
-type TabId = 'overview' | 'tasks' | 'team';
+type TabId = 'overview' | 'tasks' | 'team' | 'github';
 
 const PRIORITIES: Task['priority'][] = ['High', 'Medium', 'Low'];
 
@@ -240,6 +253,22 @@ export default function ProjectDetailsPage({
 
   const completionName = completionStatusMemo ? completionStatusMemo.name : 'Completed';
 
+  // GitHub repository connection state
+  const [githubConnectedRepos, setGithubConnectedRepos] = useState<ProjectGitHubRepository[]>([]);
+  const [githubAvailableRepos, setGithubAvailableRepos] = useState<GitHubRepository[]>([]);
+  const [githubInstallations, setGithubInstallations] = useState<GitHubInstallation[]>([]);
+  const [githubSelectedInstallationId, setGithubSelectedInstallationId] = useState<string | null>(null);
+  const [githubConnectedLoading, setGithubConnectedLoading] = useState(false);
+  const [githubAvailableLoading, setGithubAvailableLoading] = useState(false);
+  const [githubConnectLoading, setGithubConnectLoading] = useState(false);
+  const [githubDisconnectLoading, setGithubDisconnectLoading] = useState(false);
+  const [githubConnectError, setGithubConnectError] = useState<string | null>(null);
+  const [githubDisconnectError, setGithubDisconnectError] = useState<string | null>(null);
+  const [githubRepoToConnect, setGithubRepoToConnect] = useState<GitHubRepository | null>(null);
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [githubRepoToDisconnect, setGithubRepoToDisconnect] = useState<ProjectGitHubRepository | null>(null);
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
+
   const isLegacyUnapprovedDone = useCallback((task: Task): boolean => {
     const completionStatus = projectStatuses.find((s) => s.isCompletionStatus);
     return (
@@ -259,6 +288,124 @@ export default function ProjectDetailsPage({
       }
     })();
   }, [project.id]);
+
+  // GitHub repository connection state management
+  const fetchGithubInstallations = useCallback(async () => {
+    setGithubAvailableLoading(true);
+    try {
+      const res = await getGitHubInstallations();
+      if (res.success) {
+        setGithubInstallations(res.installations);
+        // Auto-select the first active installation
+        const activeInst = res.installations.find((i) => i.isActive === true);
+        if (activeInst) {
+          setGithubSelectedInstallationId(activeInst.installationId);
+        } else if (res.installations.length > 0) {
+          setGithubSelectedInstallationId(res.installations[0].installationId);
+        }
+      }
+    } catch {
+      setGithubInstallations([]);
+    } finally {
+      setGithubAvailableLoading(false);
+    }
+  }, []);
+
+  const fetchInstallationRepositories = useCallback(async (installationId: string) => {
+    setGithubAvailableLoading(true);
+    try {
+      const res = await getGitHubRepositories(installationId);
+      if (res.success) {
+        setGithubAvailableRepos(res.repositories);
+      } else {
+        setGithubAvailableRepos([]);
+      }
+    } catch {
+      setGithubAvailableRepos([]);
+    } finally {
+      setGithubAvailableLoading(false);
+    }
+  }, []);
+
+  const fetchProjectGithubRepos = useCallback(async () => {
+    setGithubConnectedLoading(true);
+    setGithubConnectError(null);
+    try {
+      const res = await getProjectGitHubRepositories(project.id);
+      if (res.success) {
+        setGithubConnectedRepos(res.repositories);
+      } else {
+        setGithubConnectedRepos([]);
+      }
+    } catch {
+      setGithubConnectedRepos([]);
+    } finally {
+      setGithubConnectedLoading(false);
+    }
+  }, [project.id]);
+
+  const handleConnectRepo = async () => {
+    if (!githubRepoToConnect || !githubSelectedInstallationId) return;
+    setGithubConnectLoading(true);
+    setGithubConnectError(null);
+    try {
+      const res = await connectProjectGitHubRepo(project.id, githubRepoToConnect.github_repo_id);
+      if (res.success) {
+        setGithubConnectError(null);
+        setConnectDialogOpen(false);
+        setGithubRepoToConnect(null);
+        await fetchProjectGithubRepos();
+      } else {
+        setGithubConnectError(res.message || 'Failed to connect repository.');
+      }
+    } catch (err: any) {
+      setGithubConnectError(err.message || 'Failed to connect repository.');
+    } finally {
+      setGithubConnectLoading(false);
+    }
+  };
+
+  const handleDisconnectRepo = (repo: ProjectGitHubRepository) => {
+    setGithubRepoToDisconnect(repo);
+    setDisconnectDialogOpen(true);
+  };
+
+  const handleConfirmDisconnect = async () => {
+    if (!githubRepoToDisconnect) return;
+    setGithubDisconnectLoading(true);
+    setGithubDisconnectError(null);
+    try {
+      const res = await disconnectProjectGitHubRepo(project.id, githubRepoToDisconnect.githubRepoId);
+      if (res.success) {
+        setGithubDisconnectError(null);
+        setDisconnectDialogOpen(false);
+        setGithubRepoToDisconnect(null);
+        await fetchProjectGithubRepos();
+      } else {
+        setGithubDisconnectError(res.message || 'Failed to disconnect repository.');
+      }
+    } catch (err: any) {
+      setGithubDisconnectError(err.message || 'Failed to disconnect repository.');
+    } finally {
+      setGithubDisconnectLoading(false);
+    }
+  };
+
+  // Load GitHub data for this project
+  useEffect(() => {
+    fetchGithubInstallations();
+    fetchProjectGithubRepos();
+  }, [project.id, fetchGithubInstallations, fetchProjectGithubRepos]);
+
+  useEffect(() => {
+    if (githubSelectedInstallationId) {
+      fetchInstallationRepositories(githubSelectedInstallationId);
+    } else {
+      setGithubAvailableRepos([]);
+    }
+  }, [githubSelectedInstallationId, fetchInstallationRepositories]);
+
+  const isPM = currentUserRole === 'Project Manager';
 
   const handleOpenTaskModal = () => {
     const r = String(currentUserRole || '').toUpperCase().replace(/[\s_-]+/g, '');
@@ -430,6 +577,7 @@ export default function ProjectDetailsPage({
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'tasks', label: `Tasks (${projectTasks.length})`, icon: CheckSquare },
     { id: 'team', label: `Team (${hookTeamMembers.length})`, icon: Users },
+    { id: 'github', label: 'GitHub', icon: GitBranch },
   ];
 
   const taskStats = {
@@ -467,6 +615,11 @@ export default function ProjectDetailsPage({
               <span className="text-[11px] font-mono text-accent-light px-2 py-0.5 rounded-md bg-accent-soft border border-accent/20">
                 {project.id}
               </span>
+              {project.projectKey && (
+                <span className="text-[9px] font-medium text-emerald-300 px-1.5 py-0.5 rounded bg-emerald-900/40 border border-emerald-500/30">
+                  {project.projectKey}
+                </span>
+              )}
               {getStatusBadge(project.status)}
               <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400">
                 {project.priority}
@@ -768,6 +921,11 @@ export default function ProjectDetailsPage({
                           <div className="font-semibold text-white">{task.title}</div>
                           <div className="flex flex-wrap items-center gap-1.5 mt-1">
                             <span className="text-[10px] text-slate-500 font-mono">{task.id}</span>
+                            {task.taskKey && (
+                              <span className="text-[9px] font-medium text-indigo-300 px-1.5 py-0.2 rounded bg-indigo-900/40 border border-indigo-500/30">
+                                {task.taskKey}
+                              </span>
+                            )}
                             {task.comments && task.comments.length > 0 && (
                               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-accent-light bg-accent-soft px-1.5 py-0.2 rounded border border-accent/30">
                                 <MessageSquare className="w-2.5 h-2.5" />
@@ -1074,7 +1232,203 @@ export default function ProjectDetailsPage({
         </div>
       )}
 
-      {/* Add Task Modal */}
+      {/* GitHub Tab */}
+      {activeTab === 'github' && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-accent-light" />
+                GitHub Integration
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Connect GitHub repositories from your workspace installation to this project.
+              </p>
+            </div>
+          </div>
+
+          {/* Installation not connected notice */}
+          {githubInstallations.length === 0 && (
+            <div className="rounded-2xl border-2 border-dashed border-slate-700/60 bg-[#0f173b]/40 p-8 text-center">
+              <div className="w-14 h-14 rounded-full bg-slate-800/50 flex items-center justify-center text-slate-400 mx-auto mb-4">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <h4 className="text-sm font-bold text-white mb-2">No GitHub installation</h4>
+              <p className="text-xs text-slate-400 max-w-sm leading-relaxed mx-auto">
+                No GitHub App installation is configured for this workspace. A Project Manager must
+                complete the GitHub App installation flow before repositories can be connected to projects.
+              </p>
+            </div>
+          )}
+
+          {githubInstallations.length > 0 && (
+            <>
+              {/* Repository selector + connect (PM only) */}
+              <div className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Connect Repository</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Select a repository from your GitHub App installation to connect to this project.
+                    </p>
+                  </div>
+                  {isPM && githubSelectedInstallationId && githubAvailableRepos.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={githubRepoToConnect?.github_repo_id || ''}
+                        onChange={(e) => {
+                          const selected = githubAvailableRepos.find(
+                            (r) => r.github_repo_id === e.target.value
+                          );
+                          setGithubRepoToConnect(selected || null);
+                        }}
+                        className="w-full sm:w-auto px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs focus:border-accent focus:outline-none cursor-pointer"
+                      >
+                        <option value="">— Select a repository —</option>
+                        {githubAvailableRepos.map((repo) => (
+                          <option key={repo.github_repo_id} value={repo.github_repo_id}>
+                            {repo.full_name || repo.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={
+                          githubConnectLoading ||
+                          !githubRepoToConnect ||
+                          !githubSelectedInstallationId
+                        }
+                        onClick={handleConnectRepo}
+                        className="px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                          githubConnectLoading
+                            ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-accent to-accent-hover text-white shadow-lg shadow-accent/25'
+                        }"
+                      >
+                        {githubConnectLoading ? 'Connecting...' : 'Connect Repository'}
+                      </button>
+                    </div>
+                  )}
+                  {isPM && githubConnectError && (
+                    <div className="w-full p-2.5 rounded-xl bg-rose-950/20 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{githubConnectError}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Connected repositories list */}
+              <div className="rounded-2xl bg-[#0f173b]/90 border border-slate-700/60 p-5 shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-sm font-bold text-white">
+                    Connected Repositories ({githubConnectedRepos.length})
+                  </h4>
+                </div>
+
+                {githubConnectedLoading ? (
+                  <div className="h-40 flex items-center justify-center text-slate-400">
+                    <RefreshCw className="w-5 h-5 animate-spin" />
+                  </div>
+                ) : githubConnectedRepos.length === 0 ? (
+                  <div className="p-8 rounded-xl border-2 border-dashed border-slate-800/60 bg-slate-900/30 text-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-800/50 flex items-center justify-center text-slate-400 mx-auto mb-3">
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-bold text-white mb-1">No connected repositories</h4>
+                    <p className="text-xs text-slate-400 max-w-sm leading-relaxed mx-auto">
+                      No GitHub repositories are connected to this project yet.
+                      {isPM ? 'Click "Connect Repository" above to add one.' : ''}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider">
+                          <th className="py-2.5 px-3">Repository</th>
+                          <th className="py-2.5 px-3">Owner</th>
+                          <th className="py-2.5 px-3">Visibility</th>
+                          <th className="py-2.5 px-3">Default Branch</th>
+                          <th className="py-2.5 px-3">Connected At</th>
+                          <th className="py-2.5 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                        {githubConnectedRepos
+                          .filter((repo) => repo.is_active)
+                          .map((repo) => (
+                          <tr
+                            key={repo.githubRepoId}
+                            className="hover:bg-slate-800/30 transition-colors"
+                          >
+                            <td className="py-3 px-3">
+                              <span className="text-sm font-medium text-white truncate">
+                                {repo.fullName || repo.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                                {repo.githubRepoId}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300 truncate max-w-xs">
+                              {repo.ownerLogin || '—'}
+                            </td>
+                            <td className="py-3 px-3">
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                  repo.private
+                                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}
+                              >
+                                {repo.private ? 'Private' : 'Public'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-slate-300 font-mono truncate max-w-xs">
+                              {repo.defaultBranch || '—'}
+                            </td>
+                            <td className="py-3 px-3 text-slate-400 font-mono text-[10px]">
+                              {repo.connectedAt ? new Date(repo.connectedAt).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              {isPM ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDisconnectRepo(repo)}
+                                  disabled={githubDisconnectLoading}
+                                  className="px-3 py-1.5 rounded-lg text-xs text-rose-400 hover:text-white hover:bg-rose-500/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {githubDisconnectLoading ? 'Disconnecting...' : 'Disconnect'}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-slate-500 italic">Read-only</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Role notice */}
+          {!isPM && (
+            <div className="p-4 rounded-xl bg-accent-soft/10 border border-accent/20">
+              <div className="flex items-center gap-2 text-xs text-accent-light">
+                <Info className="w-3 h-3" />
+                <span>
+                  Repository connection actions are restricted to Project Manager role. Your current role is{" "}
+                  <span className="font-semibold">{currentUserRole}</span>.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {isTaskModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="relative w-full max-w-md bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 shadow-2xl my-8">
@@ -1216,6 +1570,58 @@ export default function ProjectDetailsPage({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Disconnect Repository Confirmation Dialog */}
+      {disconnectDialogOpen && githubRepoToDisconnect && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md bg-[#0f173b] border border-slate-700/80 rounded-2xl p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400 shadow-md shadow-rose-500/20">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">Disconnect Repository</h3>
+                  <p className="text-xs text-slate-400">Project: {project.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisconnectDialogOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Disconnect "{githubRepoToDisconnect.fullName || githubRepoToDisconnect.name}"?</strong>
+                This will remove the repository connection from this project. The connection history will be preserved.
+              </span>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDisconnectDialogOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDisconnect}
+                disabled={githubDisconnectLoading}
+                className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 shadow-md shadow-rose-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {githubDisconnectLoading ? 'Disconnecting...' : 'Confirm Disconnect'}
+              </button>
+            </div>
           </div>
         </div>
       )}

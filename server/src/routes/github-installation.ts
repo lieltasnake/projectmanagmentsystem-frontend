@@ -176,22 +176,28 @@ router.get(
         return redirectToFrontend(res, false, 'State already used or expired.');
       }
 
-      // Create or activate installation (idempotent upsert).
-      await client.query(
-        `INSERT INTO github_installations (installation_id, pm_user_id, is_active, created_at, updated_at)
-         VALUES ($1, $2, TRUE, NOW(), NOW())
-         ON CONFLICT (installation_id) DO UPDATE SET
-           pm_user_id = EXCLUDED.pm_user_id,
-           is_active = TRUE,
-           updated_at = NOW()`,
-        [githubInstallationId, decodedPmUserId]
-      );
+       // Create or activate installation (idempotent upsert).
+       const githubOrgName = gh.data?.account?.login ?? 'unknown';
+       await client.query(
+         `INSERT INTO github_installations (installation_id, pm_user_id, github_org_name, github_repo_full_name, is_active, created_at, updated_at)
+          VALUES ($1, $2, $3, 'unknown', TRUE, NOW(), NOW())
+          ON CONFLICT (installation_id) DO UPDATE SET
+            pm_user_id = EXCLUDED.pm_user_id,
+            github_org_name = EXCLUDED.github_org_name,
+            github_repo_full_name = COALESCE(github_installations.github_repo_full_name, EXCLUDED.github_repo_full_name),
+            is_active = TRUE,
+            updated_at = NOW()`,
+         [githubInstallationId, decodedPmUserId, githubOrgName]
+       );
 
       await client.query('COMMIT');
       return redirectToFrontend(res, true, undefined, githubInstallationId);
     } catch (err: any) {
+      const pgCode = err?.code ?? 'N/A';
+      const pgMessage = err?.message ?? 'No message provided';
+      console.error(`Database error during activation. PG code=${pgCode}: ${pgMessage}`);
       await client.query('ROLLBACK').catch(() => {});
-      return redirectToFrontend(res, false, 'Database error during activation.');
+      return redirectToFrontend(res, false, `Database error during activation. (${pgMessage}, code=${pgCode}).`);
     } finally {
       client.release();
     }

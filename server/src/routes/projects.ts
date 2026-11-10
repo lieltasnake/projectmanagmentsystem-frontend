@@ -4,6 +4,10 @@ import { authenticateToken, requirePM, AuthenticatedRequest } from '../middlewar
 
 const router = Router();
 
+const VALID_PROJECT_STATUSES = ['Planning', 'In Progress', 'On Hold', 'Completed'];
+const VALID_PROJECT_PRIORITIES = ['High', 'Medium', 'Low'];
+const VALID_TEAM_ROLES = ['TL', 'TM', 'TESTER'];
+
 function computeInitials(name: string): string {
   return (
     name
@@ -14,9 +18,11 @@ function computeInitials(name: string): string {
   );
 }
 
-const VALID_PROJECT_STATUSES = ['Planning', 'In Progress', 'On Hold', 'Completed'];
-const VALID_PROJECT_PRIORITIES = ['High', 'Medium', 'Low'];
-const VALID_TEAM_ROLES = ['TL', 'TM', 'TESTER'];
+function generateProjectKey(name: string): string {
+  const base = name.replace(/[^A-Z]/gi, '').slice(0, 5);
+  const prefix = base.length >= 2 ? base : 'PRJ';
+  return prefix;
+}
 
 function normalizeProjectStatus(value: unknown): string {
   if (typeof value !== 'string') return 'Planning';
@@ -73,6 +79,7 @@ function mapProjectRow(row: any): any {
     },
     teamLeaderId: row.team_leader_id ? String(row.team_leader_id) : undefined,
     teamMemberIds: teamMemberIds.length > 0 ? teamMemberIds : undefined,
+    projectKey: row.project_key,
   };
 }
 
@@ -177,6 +184,7 @@ router.post('/', authenticateToken, requirePM, async (req: AuthenticatedRequest,
       teamLeaderId,
       teamMemberIds,
       statuses,
+      projectKey,
     } = req.body;
 
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -220,13 +228,30 @@ router.post('/', authenticateToken, requirePM, async (req: AuthenticatedRequest,
       return res.status(400).json({ success: false, error: validation.error });
     }
 
+    // Process projectKey
+    let finalProjectKey = null;
+    if (projectKey) {
+      const providedKey = String(projectKey).trim().toUpperCase();
+      if (!/^[A-Z][A-Z0-9]{1,9}$/.test(providedKey)) {
+        return res.status(400).json({ success: false, error: 'Project key must be 2-10 characters, start with a letter, and contain only letters and numbers.' });
+      }
+      const keyCheck = await client.query('SELECT 1 FROM projects WHERE project_key = $1 AND deleted_at IS NULL', [providedKey]);
+      if (keyCheck.rows.length > 0) {
+        return res.status(409).json({ success: false, error: 'Project key is already taken.' });
+      }
+      finalProjectKey = providedKey;
+    } else {
+      // Generate projectKey from name
+      finalProjectKey = generateProjectKey(projectName);
+    }
+
     await client.query('BEGIN');
 
     const insertRes = await client.query(
-      `INSERT INTO projects (title, name, description, start_date, deadline, status, priority, progress, team_leader_id, manager_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)
-       RETURNING id, title, name, description, start_date, deadline, status, priority, progress, team_leader_id, manager_id, created_at, updated_at, deleted_at`,
-      [projectName, projectName, projectDescription, startDate || null, deadline || null, projectStatus, projectPriority, parsedTeamLeaderId, managerId]
+      `INSERT INTO projects (title, name, description, start_date, deadline, status, priority, progress, team_leader_id, manager_id, project_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8, $9, $10)
+       RETURNING id, title, name, description, start_date, deadline, status, priority, progress, team_leader_id, manager_id, created_at, updated_at, deleted_at, project_key`,
+      [projectName, projectName, projectDescription, startDate || null, deadline || null, projectStatus, projectPriority, parsedTeamLeaderId, managerId, finalProjectKey]
     );
 
     const project = insertRes.rows[0];
@@ -441,6 +466,324 @@ router.get('/', authenticateToken, async (req: AuthenticatedRequest, res: Respon
  * Returns project details with team and task counts.
  * Access: PM (any active project), or TL/TM/TESTER who is manager or team member.
  */
+/**
+ * GET /api/projects/:projectId/github/repositories
+ * Lists GitHub repositories connected to the specified project.
+ * Access: PM (any active project), or TL/TM/TESTER who is manager or team member.
+ * Returns non-sensitive repository metadata only (no installation tokens).
+ */
+router.get(
+  '/:projectId/github/repositories',
+  authenticateToken,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const userId = req.user?.id;
+      const userRole = (req.user?.role || '').toUpperCase();
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required.' });
+      }
+
+      const projectId = Number(req.params.projectId);
+      if (!projectId || isNaN(projectId)) {
+        return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+      }
+
+      const hasAccess = await checkProjectAccess(client, projectId, userId, userRole);
+      if (!hasAccess) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: You do not have access to this project.',
+        });
+      }
+
+      const res2 = await client.query(
+        `SELECT
+           pgr.github_repo_id,
+           pgr.github_repo_full_name,
+           pgr.installation_id,
+           pgr.connected_at,
+           pgr.is_active,
+           pgr.auto_sync_enabled,
+           gr.name,
+           gr.owner_login,
+           gr.private,
+           gr.default_branch,
+           gr.html_url,
+           gr.description,
+           gr.archived,
+           gr.github_updated_at
+         FROM project_github_repositories pgr
+         LEFT JOIN github_repositories gr
+           ON gr.installation_id = pgr.installation_id
+          AND gr.github_repo_id = pgr.github_repo_id
+         WHERE pgr.project_id = $1
+           AND pgr.is_active = TRUE
+         ORDER BY pgr.connected_at DESC`,
+        [projectId]
+      );
+
+      return res.status(200).json({
+        success: true,
+        count: res2.rows.length,
+        repositories: res2.rows.map((row: any) => ({
+          githubRepoId: row.github_repo_id,
+          fullName: row.github_repo_full_name || row.name,
+          name: row.name,
+          ownerLogin: row.owner_login,
+          private: row.private,
+          defaultBranch: row.default_branch,
+          htmlUrl: row.html_url,
+          description: row.description,
+          archived: row.archived,
+          githubUpdatedAt: row.github_updated_at,
+          installationId: row.installation_id,
+          connectedAt: row.connected_at,
+          isActive: row.is_active,
+          autoSyncEnabled: row.auto_sync_enabled,
+        })),
+      });
+    } catch (err: any) {
+      console.error('GET /api/projects/:projectId/github/repositories error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to list connected repositories.' });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * POST /api/projects/:projectId/github/repositories/connect
+ * Connects a GitHub repository to the specified project. PM only.
+ */
+router.post(
+  '/:projectId/github/repositories/connect',
+  authenticateToken,
+  requirePM,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required.' });
+      }
+
+      const projectId = Number(req.params.projectId);
+      if (!projectId || isNaN(projectId)) {
+        return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+      }
+
+      const { githubRepoId } = req.body || {};
+      const repoId = Number(githubRepoId);
+      if (!repoId || isNaN(repoId)) {
+        return res.status(400).json({ success: false, error: 'Valid githubRepoId is required.' });
+      }
+
+      // Verify the PM manages this project
+      const isOwner = await checkProjectOwnership(client, projectId, userId);
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Only the project manager can connect repositories.',
+        });
+      }
+
+      // Verify the repository exists in github_repositories and its installation is active
+      const repoRes = await client.query(
+        `SELECT
+           gr.github_repo_id,
+           gr.name,
+           gr.full_name,
+           gr.installation_id,
+           gi.is_active AS installation_active
+         FROM github_repositories gr
+         JOIN github_installations gi
+           ON gi.installation_id = gr.installation_id
+         WHERE gr.github_repo_id = $1`,
+        [repoId]
+      );
+
+      if (repoRes.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'GitHub repository not found. Ensure the repository has been synchronized to this installation.',
+        });
+      }
+
+      const repoRow = repoRes.rows[0];
+      if (!repoRow.installation_active) {
+        return res.status(400).json({
+          success: false,
+          error: 'The GitHub installation for this repository is not active.',
+        });
+      }
+
+      // Attempt to insert or reactivate the connection.
+      // The partial unique index uq_github_repo_project_active (github_repo_id WHERE is_active = TRUE)
+      // prevents the same repository from being actively connected to another project.
+      // The partial unique index uq_project_github_repo_active (project_id, github_repo_id WHERE is_active = TRUE)
+      // prevents duplicate active connections for the same project+repo pair.
+      const insertRes = await client.query(
+        `INSERT INTO project_github_repositories (
+           project_id, github_repo_id, github_repo_full_name, installation_id,
+           connected_by, connected_at, is_active, auto_sync_enabled
+         ) VALUES (
+           $1, $2::bigint, $3, $4::bigint, $5::bigint, NOW(), TRUE, TRUE
+         )
+         ON CONFLICT (github_repo_id) WHERE is_active = TRUE DO NOTHING
+         RETURNING id, is_active`,
+        [projectId, repoId, repoRow.full_name, repoRow.installation_id, userId]
+      );
+
+      if (insertRes.rows.length === 0) {
+        // Conflict: repository is already actively connected to another project
+        const existing = await client.query(
+          `SELECT project_id FROM project_github_repositories
+           WHERE github_repo_id = $2::bigint AND is_active = TRUE
+           LIMIT 1`,
+          [projectId, repoId]
+        );
+        if (existing.rows.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `This repository is already connected to project ${existing.rows[0].project_id}.`,
+          });
+        }
+        return res.status(409).json({
+          success: false,
+          error: 'This repository is already connected to another project.',
+        });
+      }
+
+      // Check if we reactivated a previously disconnected record
+      const wasReactivated = insertRes.rows[0].is_active === true;
+      // If the row existed before with is_active=FALSE, ON CONFLICT DO NOTHING wouldn't have
+      // triggered because the partial index only covers is_active=TRUE rows.
+      // So we need to check if there was an inactive record we should have reactivated.
+      // Actually: ON CONFLICT on partial index only triggers when the conflicting row
+      // satisfies the WHERE clause. If the only existing row has is_active=FALSE,
+      // the INSERT succeeds (no conflict on the partial index).
+      // But we already set is_active=TRUE in the INSERT, so it's already active.
+      // However, if there was a previous disconnected record for THIS project+repo,
+      // we should update it instead of inserting a new one.
+      // Let's check: did we insert a new row or update an existing inactive one?
+      // Since ON CONFLICT DO NOTHING doesn't update, we need to handle reactivation separately.
+      // Check if there's an inactive record for this project+repo
+      const inactiveRes = await client.query(
+        `SELECT id FROM project_github_repositories
+         WHERE project_id = $1 AND github_repo_id = $2::bigint AND is_active = FALSE
+         LIMIT 1`,
+        [projectId, repoId]
+      );
+
+      if (inactiveRes.rows.length > 0) {
+        // Reactivate the existing disconnected record
+        await client.query(
+          `UPDATE project_github_repositories
+           SET is_active = TRUE, disconnected_at = NULL, connected_at = NOW(),
+               connected_by = $3::bigint, auto_sync_enabled = TRUE
+           WHERE id = $1`,
+          [inactiveRes.rows[0].id, projectId, repoId, userId]
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Repository connected to project successfully.',
+        repository: {
+          githubRepoId: repoId,
+          fullName: repoRow.full_name,
+          name: repoRow.name,
+          installationId: repoRow.installation_id,
+          connectedAt: new Date().toISOString(),
+          isActive: true,
+          autoSyncEnabled: true,
+        },
+      });
+    } catch (err: any) {
+      // Handle unique constraint violation from the partial unique index
+      if (err?.code === '23505') {
+        return res.status(409).json({
+          success: false,
+          error: 'This repository is already connected to another project or this project.',
+        });
+      }
+      console.error('POST /api/projects/:projectId/github/repositories/connect error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to connect repository.' });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/**
+ * DELETE /api/projects/:projectId/github/repositories/:githubRepoId/disconnect
+ * Disconnects (soft-deletes) a GitHub repository from the specified project. PM only.
+ */
+router.delete(
+  '/:projectId/github/repositories/:githubRepoId/disconnect',
+  authenticateToken,
+  requirePM,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const client = await pool.connect();
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required.' });
+      }
+
+      const projectId = Number(req.params.projectId);
+      if (!projectId || isNaN(projectId)) {
+        return res.status(400).json({ success: false, error: 'Invalid project ID.' });
+      }
+
+      const githubRepoId = Number(req.params.githubRepoId);
+      if (!githubRepoId || isNaN(githubRepoId)) {
+        return res.status(400).json({ success: false, error: 'Invalid GitHub repository ID.' });
+      }
+
+      // Verify the PM manages this project
+      const isOwner = await checkProjectOwnership(client, projectId, userId);
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Only the project manager can disconnect repositories.',
+        });
+      }
+
+      // Soft-disconnect: mark as inactive, preserve historical record
+      const res2 = await client.query(
+        `UPDATE project_github_repositories
+         SET is_active = FALSE, disconnected_at = NOW()
+         WHERE project_id = $1 AND github_repo_id = $2::bigint AND is_active = TRUE
+         RETURNING id, github_repo_id`,
+        [projectId, githubRepoId]
+      );
+
+      if (res2.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Repository connection not found or already disconnected.',
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Repository disconnected from project.',
+        repository: {
+          githubRepoId: res2.rows[0].github_repo_id,
+          disconnectedAt: new Date().toISOString(),
+        },
+      });
+    } catch (err: any) {
+      console.error('DELETE /api/projects/:projectId/github/repositories/:githubRepoId/disconnect error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to disconnect repository.' });
+    } finally {
+      client.release();
+    }
+  }
+);
+
 router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const client = await pool.connect();
   try {
@@ -1077,6 +1420,15 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
       );
     }
 
+    // Get project_key and increment task_counter (task keys implementation)
+    const projectUpdateRes = await client.query(
+      'UPDATE projects SET task_counter = task_counter + 1 WHERE id = $1 RETURNING task_counter, project_key',
+      [projectId]
+    );
+    const projectKey = projectUpdateRes.rows[0].project_key;
+    const taskNumber = projectUpdateRes.rows[0].task_counter;
+    const taskKey = `${projectKey}-${taskNumber}`;
+
     const legacyMap: Record<string, string> = {
       'Not Started': 'TODO',
       'In Progress': 'IN_PROGRESS',
@@ -1091,10 +1443,10 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
     const dbStatus = legacyMap[targetStatusName] || 'TODO';
 
     const insertRes = await client.query(
-      `INSERT INTO tasks (project_id, title, description, status, status_id, priority, assigned_to_id, deadline, due_date, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, CURRENT_TIMESTAMP)
+      `INSERT INTO tasks (project_id, title, description, status, status_id, priority, assigned_to_id, deadline, due_date, created_at, task_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, CURRENT_TIMESTAMP, $9)
        RETURNING id, project_id, title, description, status, status_id, priority, assigned_to_id, deadline, due_date, created_at`,
-      [projectId, title.trim(), description ? String(description) : null, dbStatus, targetStatusId, dbPriority, assignedUserId, deadlineVal]
+      [projectId, title.trim(), description ? String(description) : null, dbStatus, targetStatusId, dbPriority, assignedUserId, deadlineVal, taskNumber]
     );
 
     const row = insertRes.rows[0];
@@ -1122,6 +1474,8 @@ router.post('/:id/tasks', authenticateToken, async (req: AuthenticatedRequest, r
       assignedToId: row.assigned_to_id ? String(row.assigned_to_id) : null,
       deadline: row.deadline ? (row.deadline instanceof Date ? row.deadline.toISOString().slice(0,10) : String(row.deadline).slice(0,10)) : (row.due_date ? (row.due_date instanceof Date ? row.due_date.toISOString().slice(0,10) : String(row.due_date).slice(0,10)) : null),
       createdAt: row.created_at,
+      taskNumber: taskNumber,
+      taskKey: taskKey,
     };
 
     return res.status(201).json({

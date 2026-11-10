@@ -55,6 +55,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const token = getAuthToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
     ...(options.headers as Record<string, string>),
   };
 
@@ -663,7 +664,7 @@ export async function uploadDemoZip(
   form.append('file', file);
   const res = await fetch(`${API_BASE_URL}/tasks/${id}/demo/upload`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } : { 'ngrok-skip-browser-warning': 'true' },
     body: form,
   });
   const data = await res.json();
@@ -763,7 +764,7 @@ export async function uploadTaskAttachment(taskId: string | number, file: File):
   form.append('file', file);
   const res = await fetch(`${API_BASE_URL}/tasks/${taskId}/attachments`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: token ? { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' } : { 'ngrok-skip-browser-warning': 'true' },
     body: form,
   });
   const data = await res.json();
@@ -1034,6 +1035,130 @@ export async function syncGitHubPullRequests(
     {
       method: 'POST',
     }
+  );
+}
+
+export interface GitHubCommit {
+  id: string;
+  installation_id: string;
+  repository_id: string;
+  commit_sha: string;
+  message: string | null;
+  html_url: string | null;
+  author_name: string | null;
+  author_email: string | null;
+  author_date: string | null;
+  committer_name: string | null;
+  committer_email: string | null;
+  committer_date: string | null;
+  last_synced_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface GitHubCommitsResponse {
+  success: boolean;
+  installationId: string;
+  count: number;
+  commits: GitHubCommit[];
+  error?: string;
+}
+
+export interface GitHubCommitSyncSummary {
+  installationId: string;
+  fetched: number;
+  upserted: number;
+  failed: number;
+  truncated: boolean;
+  complete: boolean;
+  ownershipLost: boolean;
+  errors: string[];
+  branchResults?: unknown[];
+}
+
+export interface GitHubCommitSyncResponse {
+  success: boolean;
+  message: string;
+  summary: GitHubCommitSyncSummary;
+  error?: string;
+}
+
+export async function getGitHubCommits(installationId: string, branch?: string): Promise<GitHubCommitsResponse> {
+  const query = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+  return request<GitHubCommitsResponse>(`/github/installation/${installationId}/commits${query}`, {
+    method: 'GET',
+  });
+}
+
+export async function syncGitHubCommits(installationId: string): Promise<GitHubCommitSyncResponse> {
+  return request<GitHubCommitSyncResponse>(`/github/installation/${installationId}/commits/sync`, {
+    method: 'POST',
+  });
+}
+
+// =========================================================================
+// Project-Level GitHub Repository Connection Endpoints (PM Only)
+// =========================================================================
+
+export interface ProjectGitHubRepository {
+  githubRepoId: string;
+  fullName: string;
+  name: string;
+  ownerLogin: string | null;
+  private: boolean;
+  defaultBranch: string | null;
+  htmlUrl: string | null;
+  description: string | null;
+  archived: boolean;
+  githubUpdatedAt: string | null;
+  installationId: string;
+  connectedAt: string;
+  isActive: boolean;
+  autoSyncEnabled: boolean;
+}
+
+export interface ProjectGitHubRepositoriesResponse {
+  success: boolean;
+  count: number;
+  repositories: ProjectGitHubRepository[];
+  error?: string;
+}
+
+export interface ConnectProjectGitHubRepoResponse {
+  success: boolean;
+  message: string;
+  repository?: ProjectGitHubRepository;
+}
+
+export async function getProjectGitHubRepositories(
+  projectId: string | number
+): Promise<ProjectGitHubRepositoriesResponse> {
+  return request<ProjectGitHubRepositoriesResponse>(
+    `/projects/${projectId}/github/repositories`,
+    { method: 'GET' }
+  );
+}
+
+export async function connectProjectGitHubRepo(
+  projectId: string | number,
+  githubRepoId: string | number
+): Promise<ConnectProjectGitHubRepoResponse> {
+  return request<ConnectProjectGitHubRepoResponse>(
+    `/projects/${projectId}/github/repositories/connect`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ githubRepoId }),
+    }
+  );
+}
+
+export async function disconnectProjectGitHubRepo(
+  projectId: string | number,
+  githubRepoId: string | number
+): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(
+    `/projects/${projectId}/github/repositories/${githubRepoId}/disconnect`,
+    { method: 'DELETE' }
   );
 }
 

@@ -20,6 +20,8 @@ export interface Project {
   teamLeaderId?: string;
   /** IDs of Team Members assigned to this project */
   teamMemberIds?: string[];
+  /** Project key (e.g., "PRJ123") */
+  projectKey?: string;
 }
 
 export interface ProjectStatus {
@@ -127,6 +129,10 @@ export interface Task {
   attachments?: TaskAttachment[];
   demoSubmission?: DemoSubmission;
   subtasks?: Subtask[];
+  /** Task number (e.g., 123) */
+  taskNumber?: number;
+  /** Task key (e.g., "PRJ-123") */
+  taskKey?: string;
 }
 
 export interface TeamMember {

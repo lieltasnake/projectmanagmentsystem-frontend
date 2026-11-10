@@ -618,6 +618,11 @@ export default function TaskReviewModal({
                 <span className="text-[10px] font-mono text-accent-light px-2 py-0.5 rounded bg-accent-soft border border-accent/30 font-semibold">
                   {task.id}
                 </span>
+                {task.taskKey && (
+                  <span className="text-[10px] font-medium text-indigo-300 px-1.5 py-0.2 rounded bg-indigo-900/40 border border-indigo-500/30">
+                    {task.taskKey}
+                  </span>
+                )}
                 <span className="text-xs text-slate-400 font-medium">
                   {project ? project.name : 'Project Task'}
                 </span>

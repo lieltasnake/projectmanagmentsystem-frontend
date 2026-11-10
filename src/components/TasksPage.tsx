@@ -1312,11 +1312,16 @@ export default function TasksPage({
                                       </button>
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-semibold text-white break-words">
-                                        {task.title}
-                                      </span>
-                                      {canManageTask(task) && task.status !== 'Completed' && (
+                                     <div className="flex items-center gap-2">
+                                       <span className="font-semibold text-white break-words">
+                                         {task.title}
+                                       </span>
+                                       {task.taskKey && (
+                                         <span className="text-[9px] font-medium text-indigo-300 px-1.5 py-0.2 rounded bg-indigo-900/40 border border-indigo-500/30">
+                                           {task.taskKey}
+                                         </span>
+                                       )}
+                                       {canManageTask(task) && task.status !== 'Completed' && (
                                         <button
                                           type="button"
                                           onClick={() => handleStartEditTitle(task)}
@@ -1773,10 +1778,17 @@ export default function TasksPage({
                             </div>
                           </div>
 
-                          {/* Task Title */}
-                          <h4 className="text-xs font-bold text-white leading-snug break-words">
-                            {task.title}
-                          </h4>
+                           {/* Task Title */}
+                           <h4 className="text-xs font-bold text-white leading-snug break-words">
+                             {task.title}
+                           </h4>
+                           {task.taskKey && (
+                             <div className="mt-1.5">
+                               <span className="text-[9px] font-medium text-indigo-300 px-1.5 py-0.2 rounded bg-indigo-900/40 border border-indigo-500/30">
+                                 {task.taskKey}
+                               </span>
+                             </div>
+                           )}
 
                           {/* Recommendation Flag if any */}
                           {task.tlRecommendation && (

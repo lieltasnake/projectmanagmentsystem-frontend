@@ -3,7 +3,8 @@ import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 
 const connectionString = process.env.DATABASE_URL;
 

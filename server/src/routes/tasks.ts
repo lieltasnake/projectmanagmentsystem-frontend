@@ -153,7 +153,7 @@ router.patch('/:id', authenticateToken, requireRoles('PM', 'TL'), async (req: Au
     if (!taskId || isNaN(taskId)) return res.status(400).json({ success: false, error: 'Invalid task ID.' });
 
     const taskRes = await client.query(
-      'SELECT t.*, p.manager_id, p.deleted_at AS project_deleted FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
+      'SELECT t.*, p.manager_id, p.deleted_at AS project_deleted, p.project_key FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
       [taskId]
     );
     if (taskRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Task not found.' });
@@ -221,6 +221,8 @@ router.patch('/:id', authenticateToken, requireRoles('PM', 'TL'), async (req: Au
         deadline: r.deadline ? String(r.deadline).slice(0, 10) : (r.due_date ? String(r.due_date).slice(0, 10) : null),
         createdAt: r.created_at,
         updatedAt: r.updated_at,
+        taskNumber: r.task_number || null,
+        taskKey: r.task_number ? `${r.project_key}-${r.task_number}` : null,
       },
     });
   } catch (err: any) {
@@ -909,7 +911,21 @@ router.patch('/:id/approve', authenticateToken, async (req: AuthenticatedRequest
       );
     }
     await client.query('COMMIT');
-    return res.status(200).json({ success: true, message: 'Task approved and completed.', status: completionStatusName });
+    
+    // Get the updated task with task number and key
+    const finalTaskRes = await client.query(
+      'SELECT t.*, p.project_key FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
+      [taskId]
+    );
+    const finalTask = finalTaskRes.rows[0];
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Task approved and completed.',
+      status: completionStatusName,
+      taskNumber: finalTask.task_number || null,
+      taskKey: finalTask.task_number ? `${finalTask.project_key}-${finalTask.task_number}` : null,
+    });
   } catch (err: any) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/tasks/:id/approve error:', err.message);
@@ -1004,8 +1020,8 @@ router.get('/:id', authenticateToken, async (req: AuthenticatedRequest, res: Res
     if (!taskId || isNaN(taskId)) return res.status(400).json({ success: false, error: 'Invalid task ID.' });
 
     const taskRes = await client.query(
-      `SELECT t.*, p.deleted_at AS project_deleted, p.manager_id, u.name AS 
-assigned_to_name
+      `SELECT t.*, p.deleted_at AS project_deleted, p.manager_id, p.project_key, u.name AS 
+ assigned_to_name
        FROM tasks t JOIN projects p ON p.id = t.project_id LEFT JOIN users u ON u.id = t.assigned_to_id
        WHERE t.id = $1`,
       [taskId],
@@ -1063,6 +1079,8 @@ assigned_to_name
         attachments: attRes.rows.map((a: any) => ({ id: String(a.id), name: a.name, size: a.size, type: a.type, fileUrl: a.file_url, uploadedBy: a.uploaded_by ? String(a.uploaded_by) : '', uploadedAt: a.uploaded_at })),
         reviews: revRes.rows.map((r: any) => ({ id: String(r.id), authorId: r.author_id ? String(r.author_id) : null, authorName: r.author_name, authorRole: r.author_role, action: r.action, comment: r.comment, submissionId: r.submission_id ? String(r.submission_id) : null, timestamp: r.created_at })),
         submissions: submRes.rows.map((s: any) => ({ id: String(s.id), submittedBy: s.submitted_by ? String(s.submitted_by) : null, submittedRole: s.submitted_role, submittedAt: s.submitted_at, demoUrl: s.demo_url, description: s.description, version: s.version })),
+        taskNumber: task.task_number || null,
+        taskKey: task.task_number ? `${task.project_key}-${task.task_number}` : null,
       },
     });
   } catch (err: any) {
